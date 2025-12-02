@@ -1,0 +1,123 @@
+#include "performance_analyzer.h"
+#include "xparameters.h"
+#include "xtmrctr.h"
+#include "xintc.h"
+#include "xil_printf.h"
+#include "microblaze_interrupts_i.h"  // or whatever header your BSP uses
+
+XTmrCtr timer1;
+XIntc   sys_intc1;
+
+
+void performance_analyzer_init(void)
+{
+    int Status;
+
+    // -----------------------------
+    // 1. Initialize interrupt controller
+    // -----------------------------
+    Status = XIntc_Initialize(&sys_intc1, XPAR_INTC_0_DEVICE_ID);
+    if (Status != XST_SUCCESS) {
+        xil_printf("INTC init failed\r\n");
+        return XST_FAILURE;
+    }
+
+    // -----------------------------
+    // 2. Initialize timer
+    // -----------------------------
+    Status = XTmrCtr_Initialize(&timer1, XPAR_AXI_TIMER_1_DEVICE_ID);
+    if (Status != XST_SUCCESS) {
+        xil_printf("Timer init failed\r\n");
+        return XST_FAILURE;
+    }
+
+    // Use channel 0 for everything
+    const u8 chan = 0;
+
+    // Register our per_anal_ISR as the callback for the AXI timer driver
+    XTmrCtr_SetHandler(&timer1,
+                       (XTmrCtr_Handler)per_anal_ISR,
+                       &timer1);
+
+    // Enable interrupt + auto-reload on channel 0
+    XTmrCtr_SetOptions(&timer1,
+                       chan,
+                       XTC_INT_MODE_OPTION | XTC_AUTO_RELOAD_OPTION);
+
+    // Set period: 10 ms at 100 MHz => 1,000,000 ticks
+    // Timer counts up from this reset value to 0xFFFFFFFF
+    XTmrCtr_SetResetValue(&timer1,
+                          chan,
+                          0xFFFFFFFFu - 1000000u); // 10 ms
+
+    // -----------------------------
+    // 3. Connect timer interrupt into INTC
+    // -----------------------------
+    Status = XIntc_Connect(
+        &sys_intc1,
+        XPAR_MICROBLAZE_0_AXI_INTC_AXI_TIMER_1_INTERRUPT_INTR,
+        (XInterruptHandler)XTmrCtr_InterruptHandler,
+        &timer1
+    );
+    if (Status != XST_SUCCESS) {
+        xil_printf("INTC: timer connect failed\r\n");
+        return XST_FAILURE;
+    }
+
+    // Enable this interrupt line in the INTC
+    XIntc_Enable(&sys_intc1,
+                 XPAR_MICROBLAZE_0_AXI_INTC_AXI_TIMER_1_INTERRUPT_INTR);
+
+    // -----------------------------
+    // 4. Start interrupt controller
+    // -----------------------------
+    Status = XIntc_Start(&sys_intc1, XIN_REAL_MODE);
+    if (Status != XST_SUCCESS) {
+        xil_printf("INTC start failed\r\n");
+        return XST_FAILURE;
+    }
+
+    // -----------------------------
+    // 5. Start the timer (channel 0)
+    // -----------------------------
+    XTmrCtr_Start(&timer1, chan);
+
+    // -----------------------------
+    // 6. Hook INTC into MicroBlaze and enable interrupts
+    // -----------------------------
+    // Use the single-instance handler; pass pointer to the intc instance
+    microblaze_register_handler(
+        (XInterruptHandler)XIntc_InterruptHandler,
+        (void *)&sys_intc1
+    );
+
+    // Finally, enable interrupts globally in MicroBlaze
+    microblaze_enable_interrupts();
+
+    xil_printf("Performance analyzer timer initialized\r\n");
+    return XST_SUCCESS;
+}
+
+// This is called *by* XTmrCtr_InterruptHandler.
+// CallBackRef is whatever you passed into XTmrCtr_SetHandler (&timer1 here)
+// TmrCtrNumber is the channel index (0 in our setup).
+void per_anal_ISR(void *CallBackRef, u8 TmrCtrNumber)
+{
+    XTmrCtr *tmr = (XTmrCtr *)CallBackRef;
+
+    // Safety: only act on our expected channel (0)
+    if (TmrCtrNumber != 0) {
+        return;
+    }
+
+    // At this point the driver has already:
+    // 1. Determined that channel 0 caused the interrupt
+    // 2. Cleared the interrupt condition in hardware
+
+    // You can now do your very small / quick profiling work.
+    xil_printf("Interrupt! (chan %u)\r\n", (unsigned)TmrCtrNumber);
+
+    // DO NOT re-clear the interrupt here; the driver already did.
+    // Keeping this ISR short is important for performance analyzer accuracy.
+    (void)tmr; // if you don’t use it yet, avoids compiler warnings
+}

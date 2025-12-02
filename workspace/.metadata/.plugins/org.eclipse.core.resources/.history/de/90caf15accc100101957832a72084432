@@ -1,0 +1,163 @@
+#include "fft.h"
+#include "complex.h"
+#include "trig.h"
+#include <stdlib.h>
+
+
+#ifndef PI
+#define PI 3.14159265358979323846f
+#endif
+
+// Max FFT length this file supports.
+#define FFT_MAX_N             512
+#define FFT_MAX_M             9     // log2(512)
+
+// Number of real, non-zero samples before zero-padding.
+// With 4-to-1 averaging from 512 raw -> 128 effective samples.
+#define FFT_USED_REAL_SAMPLES 128
+
+// Scratch buffers for FFT
+static float tmp_re[FFT_MAX_N];
+static float tmp_im[FFT_MAX_N];
+
+// Reverse the lowest 'bits' bits of x (for bit-reversal permutation)
+static unsigned reverse_bits(unsigned x, int bits)
+{
+    unsigned r = 0;
+    int i;
+    for (i = 0; i < bits; ++i) {
+        r = (r << 1) | (x & 1);
+        x >>= 1;
+    }
+    return r;
+}
+
+// q: real part array (length n)
+// w: imag part array (length n)
+// n: FFT length (must be <= 512 and power of 2)
+// m: log2(n) (for n=512, m=9)
+// sample_f: sampling frequency AFTER decimation (Fs/4)
+float fft(float* q, float* w, int n, int m, float sample_f)
+{
+    int i, j;
+
+    if (n > FFT_MAX_N) {
+        // Too big for this implementation
+        return 0.0f;
+    }
+
+    // --- DC OFFSET REMOVAL over the real, non-zero region ---
+    {
+        float mean = 0.0f;
+        int used = FFT_USED_REAL_SAMPLES;
+        if (used > n) used = n;
+
+        for (i = 0; i < used; ++i) {
+            mean += q[i];
+        }
+        mean /= (float)used;
+
+        for (i = 0; i < used; ++i) {
+            q[i] -= mean;
+        }
+        // w[i] assumed 0 initially for real input
+    }
+    // --- END DC OFFSET REMOVAL ---
+
+    // --- Bit-reversal permutation: copy into tmp_re/tmp_im in bit-reversed order ---
+    for (i = 0; i < n; ++i) {
+        unsigned ri = reverse_bits((unsigned)i, m);
+        if (ri < (unsigned)n) {
+            tmp_re[ri] = q[i];
+            tmp_im[ri] = w[i];
+        }
+    }
+
+    // Copy bit-reversed data back into q,w
+    for (i = 0; i < n; ++i) {
+        q[i] = tmp_re[i];
+        w[i] = tmp_im[i];
+    }
+
+    // --- Cooley-Tukey radix-2 DIT FFT ---
+    // Stage loop: s = 1..m (where stage size = 2^s)
+    for (int s = 1; s <= m; ++s) {
+        int mval = 1 << s;        // size of this stage's butterfly group
+        int half = mval >> 1;     // number of butterflies per group
+        float theta = -2.0f * PI / (float)mval;  // angle step for this stage
+
+        for (int k = 0; k < n; k += mval) {
+            // For j = 0..half-1, compute twiddle and butterfly
+            for (j = 0; j < half; ++j) {
+                float angle = theta * (float)j;
+                float cos_k = cosine(angle);
+                float sin_k = sine(angle);
+
+                int i0 = k + j;         // index of "even" element
+                int i1 = k + j + half;  // index of "odd" element
+
+                float ur = q[i0];
+                float ui = w[i0];
+                float vr = q[i1];
+                float vi = w[i1];
+
+                // v * W (complex multiply)
+                float tr = vr * cos_k - vi * sin_k;
+                float ti = vr * sin_k + vi * cos_k;
+
+                // u + vW
+                q[i0] = ur + tr;
+                w[i0] = ui + ti;
+                // u - vW
+                q[i1] = ur - tr;
+                w[i1] = ui - ti;
+            }
+        }
+    }
+
+    // --- Magnitude + peak detection ---
+    float max = 0.0f;
+    int place = 1;   // index of max bin
+
+    for (i = 1; i < (n/2); ++i) { // only up to Nyquist
+        float re = q[i];
+        float im = w[i];
+        tmp_re[i] = re*re + im*im;  // power
+        if (tmp_re[i] > max) {
+            max = tmp_re[i];
+            place = i;
+        }
+    }
+
+    if (place <= 0 || place >= (n/2 - 1)) {
+        // Peak at edge or something odd; just return the basic bin frequency
+        return (sample_f / (float)n) * (float)place;
+    }
+
+    float s = sample_f / (float)n;  // bin spacing
+
+    // --- Parabolic interpolation around the peak (bins place-1, place, place+1) ---
+    {
+        float y1 = tmp_re[place - 1];
+        float y2 = tmp_re[place];
+        float y3 = tmp_re[place + 1];
+
+        float x0 = s + (2.0f * s * (y2 - y1)) / (2.0f * y2 - y1 - y3);
+        x0 = x0 / s - 1.0f;
+
+        float frequency = (sample_f / (float)n) * (float)place;
+
+        if (x0 < 0.0f || x0 > 2.0f) {
+            // curve fit failed; return basic bin center
+            return frequency;
+        }
+
+        if (x0 <= 1.0f)  {
+            frequency = frequency - (1.0f - x0) * s;
+        } else {
+            frequency = frequency + (x0 - 1.0f) * s;
+        }
+
+        return frequency;
+    }
+}

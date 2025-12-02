@@ -1,0 +1,55 @@
+//make performance anaylzer here
+//idea: 
+//1. have a periodic timer interrupt
+//2. on each interupt, read the r14 register, which is the address to the intstruction that was just interupted
+//3. store address in a table with count of how many times it was called
+//3b. Attempt to make code that maps all lines of code from a function to the functionname so its easier to read
+//Do not do this in the performance analyzer, or it will be way to slow
+//want fast and small interupt
+//4. check with the .elf file for analysis on which lines of code and therefore which functions are taking the most time
+//5. use data for optimization
+#include "performance_analyzer.h"
+XTmrCtr timer1;
+XIntc    sys_intc1;
+void performance_analyzer_init(){
+    //init timer(this is the second channel timer)
+    //update rest to be autoreload!
+
+	Status = XIntc_Initialize(&sys_intc1, XPAR_INTC_0_DEVICE_ID);
+	if (Status != XST_SUCCESS) { xil_printf("INTC init failed\r\n"); return XST_FAILURE; }
+
+    XTmrCtr_Initialize(&timer1, XPAR_AXI_TIMER_1_DEVICE_ID);//init scnd timer
+    XTmrCtr_SetHandler(&timer1, (XTmrCtr_Handler)per_anal_ISR, NULL);//set handeler
+    XTmrCtr_SetOptions(&timer1, 1,  XTC_INT_MODE_OPTION | XTC_AUTO_RELOAD_OPTION);//autoreload mode
+    XTmrCtr_SetResetValue(&timer1, 0, 0xFFFFFFFF - 1000000);//10ms, note clock is 100MHz
+
+    int Status = XIntc_Connect(&sys_intc1,
+        XPAR_MICROBLAZE_0_AXI_INTC_AXI_TIMER_1_INTERRUPT_INTR,
+        (XInterruptHandler)XTmrCtr_InterruptHandler, &timer1);
+    if (Status != XST_SUCCESS) xil_printf("INTC: timer connect failed\r\n");
+    XIntc_Enable(&sys_intc1, XPAR_MICROBLAZE_0_AXI_INTC_AXI_TIMER_1_INTERRUPT_INTR);
+
+    XTmrCtr_Start(&timer1, 0);
+
+    microblaze_register_handler(
+			(XInterruptHandler) XIntc_DeviceInterruptHandler,
+			(void*) XPAR_MICROBLAZE_0_AXI_INTC_DEVICE_ID);
+    //	microblaze_register_handler((XInterruptHandler)XIntc_DeviceInterruptHandler,
+    //			(void*)PUSHBUTTON_DEVICE_ID);
+        //xil_printf("Registers handled!\r\n");
+
+	/*
+	 * Enable interrupts on MicroBlaze
+	 */
+	microblaze_enable_interrupts();
+    //timer should be interupting now
+    }
+
+void per_anal_ISR (void *Ref){
+    XTmrCtr *tmr = (XTmrCtr*)Ref;
+    u32 csr = XTmrCtr_ReadReg(tmr->BaseAddress, 0, XTC_TCSR_OFFSET);
+    //test code
+    xil_printf("Interupt!\n");
+    //clear interupt
+    XTmrCtr_WriteReg(tmr->BaseAddress, 0, XTC_TCSR_OFFSET, csr | XTC_CSR_INT_OCCURED_MASK);
+}

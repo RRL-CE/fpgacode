@@ -1,0 +1,8 @@
+07:22:46 **** Build of configuration Debug for project lab2a_code_system ****
+make all 
+make: Warning: File 'makefile' has modification time 110 s in the future
+Skipping SD card image generation. Reason: The system project only has applications for microblaze processors.
+make: warning:  Clock skew detected.  Your build may be incomplete.
+
+07:22:46 Build Finished (took 66ms)
+

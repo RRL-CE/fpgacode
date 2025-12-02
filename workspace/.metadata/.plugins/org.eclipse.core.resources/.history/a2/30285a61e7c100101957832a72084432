@@ -1,0 +1,218 @@
+#include "fft.h"
+#include "complex.h"
+#include "trig.h"
+#include <stdlib.h>
+#include "fft.h"
+#include "complex.h"
+#include "trig.h"
+
+
+#define FFT_MAX_N 512
+
+// Scratch buffers (fixed-point Q1.31)
+static q31_t new_[FFT_MAX_N];
+static q31_t new_im[FFT_MAX_N];
+
+// Twiddle table: 1D, length n/2, in Q1.31
+static q31_t tw_cos[FFT_MAX_N / 2];
+static q31_t tw_sin[FFT_MAX_N / 2];
+static int   tw_n           = 0;
+static int   tw_initialized = 0;
+
+// Power buffer for magnitude^2 (for peak + interpolation)
+static float pow_buf[FFT_MAX_N / 2];
+
+// Initialize twiddle table for given n (if needed)
+static void fft_init_twiddles(int n)
+{
+    int L = n / 2;
+    if (tw_initialized && tw_n == n)
+        return;
+
+    for (int p = 0; p < L; ++p) {
+        // Use PI from trig.h (no redefinition here)
+        float angle = -PI * (float)p / (float)L;
+        float c = cosine(angle);
+        float s = sine(angle);
+        tw_cos[p] = float_to_q31(c);
+        tw_sin[p] = float_to_q31(s);
+    }
+
+    tw_n = n;
+    tw_initialized = 1;
+}
+
+// q, w: Q1.31 fixed-point arrays of length n
+// n: FFT length (<= 1024, power of 2)
+// m: log2(n)
+// sample_f: sampling frequency in Hz (float)
+float fft(q31_t* q, q31_t* w, int n, int m, float sample_f)
+{
+    int a, b, r, d, e, c;
+    int k, place;
+    int i, j;
+    float max, frequency;
+
+    if (n > FFT_MAX_N)
+        return 0.0f;
+
+    // --- DC OFFSET REMOVAL on first 256 samples (int) ---
+    {
+        int used = 512;
+        if (used > n) used = n;
+
+        int64_t sum = 0;
+        for (i = 0; i < used; ++i) {
+            sum += q[i];
+        }
+        q31_t mean = (q31_t)(sum / used);
+
+        for (i = 0; i < used; ++i) {
+            q[i] -= mean;
+        }
+        // w[i] assumed 0 initially for real input
+    }
+    // --- END DC OFFSET REMOVAL ---
+
+    // --- Ordering algorithm (same structure as original, but Q31) ---
+    a = n / 2;
+    b = 1;
+    for (i = 0; i < (m - 1); i++) {  // for each stage
+        d = 0;
+        for (j = 0; j < b; j++) {    // for each section
+            for (c = 0; c < a; c++) { // for each point in section
+                e = c + d;
+                new_[e]        = q[(c * 2) + d];
+                new_im[e]      = w[(c * 2) + d];
+                new_[e + a]    = q[(2 * c) + 1 + d];
+                new_im[e + a]  = w[(2 * c) + 1 + d];
+            }
+            d += (n / b);
+        }
+        for (r = 0; r < n; r++) {
+            q[r] = new_[r];
+            w[r] = new_im[r];
+        }
+        b *= 2;
+        a = n / (2 * b);
+    }
+    // --- End ordering algorithm ---
+
+    // Initialize twiddles
+    fft_init_twiddles(n);
+
+    b = 1;
+    k = 0;
+    {
+        int L = n / 2;
+        for (j = 0; j < m; j++) {  // for each "power of 2"
+
+            // --- FFT MATH using 1D twiddle table, fixed-point ---
+            k = 0;
+            int step = L / b;
+
+            // twiddle for k=0
+            q31_t cos_k = tw_cos[0];
+            q31_t sin_k = tw_sin[0];
+
+            for (i = 0; i < n; i += 2) {  // for each pair
+                if (i % (n / b) == 0 && i != 0) {
+                    k++;
+                    int idx = k * step;   // index in twiddle table
+                    cos_k = tw_cos[idx];
+                    sin_k = tw_sin[idx];
+                }
+
+                // values at i and i+1
+                q31_t ar = q[i];
+                q31_t ai = w[i];
+                q31_t br = q[i+1];
+                q31_t bi = w[i+1];
+
+                // scale down by 1 bit to reduce overflow risk
+                ar >>= 1; ai >>= 1;
+                br >>= 1; bi >>= 1;
+
+                // (br + j*bi) * (cos_k + j*sin_k)
+                q31_t tr = q31_mul(br, cos_k) - q31_mul(bi, sin_k);
+                q31_t ti = q31_mul(br, sin_k) + q31_mul(bi, cos_k);
+
+                // butterfly: u+v, u-v
+                new_[i]     = ar + tr;
+                new_im[i]   = ai + ti;
+                new_[i+1]   = ar - tr;
+                new_im[i+1] = ai - ti;
+            }
+
+            for (i = 0; i < n; i++) {
+                q[i] = new_[i];
+                w[i] = new_im[i];
+            }
+            // --- END FFT MATH ---
+
+            // --- REORDER (same structure as original) ---
+            for (i = 0; i < n / 2; i++) {
+                new_[i]        = q[2 * i];
+                new_[i + n/2]  = q[2 * i + 1];
+                new_im[i]      = w[2 * i];
+                new_im[i + n/2]= w[2 * i + 1];
+            }
+            for (i = 0; i < n; i++) {
+                q[i] = new_[i];
+                w[i] = new_im[i];
+            }
+            // --- END REORDER ---
+
+            b *= 2;
+            k = 0;
+        }
+    }
+
+    // --- Magnitude and peak detection ---
+    max   = 0.0f;
+    place = 1;
+    for (i = 1; i < (n / 2); i++) {
+        float re = q31_to_float(q[i]);
+        float im = q31_to_float(w[i]);
+        float mag2 = re*re + im*im;
+        pow_buf[i] = mag2;
+        if (mag2 > max) {
+            max   = mag2;
+            place = i;
+        }
+    }
+
+    float s = sample_f / (float)n;
+    frequency = s * (float)place;
+
+    if (place <= 0 || place >= (n/2 - 1)) {
+        return frequency;
+    }
+
+    // --- Parabolic interpolation around the peak ---
+    {
+        float y1 = pow_buf[place - 1];
+        float y2 = pow_buf[place];
+        float y3 = pow_buf[place + 1];
+
+        float denom = (2.0f * y2 - y1 - y3);
+        if (denom == 0.0f) {
+            return frequency;
+        }
+
+        float x0 = s + (2.0f * s * (y2 - y1)) / denom;
+        x0 = x0 / s - 1.0f;
+
+        if (x0 < 0.0f || x0 > 2.0f) {
+            return frequency;
+        }
+
+        if (x0 <= 1.0f) {
+            frequency = frequency - (1.0f - x0) * s;
+        } else {
+            frequency = frequency + (x0 - 1.0f) * s;
+        }
+    }
+
+    return frequency;
+}

@@ -1,0 +1,17 @@
+#include <stdio.h>
+#include <stdbool.h>
+#include "platform.h"
+#include "xil_printf.h"
+#include "xparameters.h"
+#include "xgpio.h"
+#include "xtmrctr.h"
+#include "xintc.h"
+#include "xtmrctr_l.h"
+#include "xintc_l.h"
+#include "mb_interface.h"
+#include <xbasic_types.h>
+#include <xio.h>
+XIntc    sys_intc1;
+XTmrCtr timer1;//moved here so that main can access and the performacne analyzer init can access it
+
+void performance_analyzer_init();

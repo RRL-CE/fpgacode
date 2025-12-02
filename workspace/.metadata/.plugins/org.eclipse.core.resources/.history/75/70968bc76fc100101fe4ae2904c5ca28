@@ -1,0 +1,303 @@
+#include "fft.h"
+
+// If PI isn't defined elsewhere, define it here.
+#ifndef PI
+#define PI 3.14159265358979323846f
+#endif
+
+// --- Configuration for this FFT implementation ---
+
+// Maximum FFT length supported by this file.
+// You're committing to N = 4096, so we size for that.
+#define FFT_MAX_N             4096
+#define FFT_MAX_M             12     // log2(4096)
+
+// Number of *real* (non-zero) samples at the start of q[]
+// BEFORE zero-padding. For your current plan: 1024 real samples,
+// zero-padded to N = 4096.
+#define FFT_USED_REAL_SAMPLES 1024
+
+
+// --- Scratch buffers ---
+// These are scratch arrays for the FFT, sized to FFT_MAX_N.
+// OLD:
+// static float new_[2048];//always change thse to match samples!!!!
+// static float new_im[2048];
+// NEW:
+static float new_[FFT_MAX_N];     // real scratch
+static float new_im[FFT_MAX_N];   // imaginary scratch
+
+
+// --- Twiddle memoization support ---
+
+// Twiddle structure holds one complex twiddle W = cos(angle) + j*sin(angle)
+typedef struct {
+    float cosv;
+    float sinv;
+} Twiddle;
+
+// Flat twiddle table: total entries = sum over stages of (2^stage) = N - 1.
+// For N = 4096, that's 4095 entries. We allocate FFT_MAX_N entries for safety.
+static Twiddle twiddle_table[FFT_MAX_N];
+
+// For each stage j (0..m-1), store the starting index into twiddle_table.
+// So for stage j, valid k are 0..(2^j - 1), and we index into the table as:
+//    twiddle_table[ twiddle_stage_offset[j] + k ]
+static unsigned short twiddle_stage_offset[FFT_MAX_M];
+
+static int twiddles_initialized = 0;
+static int twiddle_n = 0;
+static int twiddle_m = 0;
+
+// Precompute all twiddles for a given N and M, once.
+// This is the memoization step: we pay the cos/sin cost here, not inside fft().
+static void fft_init_twiddles(int n, int m)
+{
+    int j, k;
+    int offset = 0;
+
+    if (n > FFT_MAX_N)  n = FFT_MAX_N;
+    if (m > FFT_MAX_M)  m = FFT_MAX_M;
+
+    for (j = 0; j < m; ++j) {
+        int b = 1 << j;               // number of distinct k values in this stage
+        twiddle_stage_offset[j] = offset;
+
+        for (k = 0; k < b; ++k) {
+            float angle = -PI * (float)k / (float)b;
+            // These cosine() / sine() calls are done ONCE here,
+            // not inside the inner loops of fft().
+            twiddle_table[offset + k].cosv = cosine(angle);
+            twiddle_table[offset + k].sinv = sine(angle);
+        }
+
+        offset += b;
+    }
+
+    twiddles_initialized = 1;
+    twiddle_n = n;
+    twiddle_m = m;
+}
+
+
+// --- Main FFT function ---
+// q: real part array
+// w: imaginary part array
+// n: FFT length (must be <= FFT_MAX_N, e.g. 4096)
+// m: log2(n)
+// sample_f: sampling frequency
+float fft(float* q, float* w, int n, int m, float sample_f) {
+    int a,b,r,d,e,c;      // variables for ordering the algorithm
+    int k,place;          // variables for math (kth bucket, n points)
+    int i,j;              // loop vars
+    float real=0,imagine=0; // temp real/imag for twiddle*value
+    float max,frequency;  // for magnitude search and output freq
+
+    // --- DC OFFSET REMOVAL ---
+    // We assume the first FFT_USED_REAL_SAMPLES entries in q[] are the
+    // actual signal; the rest (up to n) are zero padding. We compute
+    // the mean over ONLY the real data, and subtract it from that region.
+    {
+        float mean = 0.0f;
+        int used = FFT_USED_REAL_SAMPLES;
+        if (used > n) used = n;  // safety in case n < FFT_USED_REAL_SAMPLES
+
+        for (i = 0; i < used; ++i) {
+            mean += q[i];
+        }
+        mean /= (float)used;
+
+        for (i = 0; i < used; ++i) {
+            q[i] -= mean;
+        }
+        // w[i] assumed to be 0 initially for real input
+    }
+    // --- END DC OFFSET REMOVAL ---
+
+
+    //This is how the FFT implementation currently works:
+    //1. It takes in the real and imaginary parts of the signal, the number of points (n), the number of stages (m), and the sample frequency (sample_f).
+    //2. It performs an ordering algorithm to rearrange the input data.
+    //   We perform the ordering algorithm to ensure that the data is in the correct order for the FFT, so that a split in the middle is the same as a split into even and odds.
+    //3. It then performs the FFT computation in a series of stages, using the Cooley-Turkey algorithm.
+    //4. Finally, it calculates the magnitudes of the frequency components to find the dominant frequency in the signal.
+
+
+    // --- Ordering algorithm (rearranges data before main stages) ---
+    a = n / 2;  // halfway point
+    b = 1;
+
+    for (i = 0; i < (m - 1); i++) { // for each reordering stage
+        d = 0;
+        for (j = 0; j < b; j++) {   // for each section
+            for (c = 0; c < a; c++) {   // for each point in section
+                e = c + d;
+
+                // Split into even and odd indices within the section
+                new_[e]    = q[(c * 2) + d];
+                new_im[e]  = w[(c * 2) + d];
+                new_[e+a]  = q[2*c + 1 + d];
+                new_im[e+a]= w[2*c + 1 + d];
+            }
+            d += (n / b);
+        }
+        for (r = 0; r < n; r++) {
+            q[r] = new_[r];
+            w[r] = new_im[r];
+        }
+        b *= 2;
+        a = n / (2 * b);
+    }
+    // --- end ordering algorithm ---
+
+
+    // --- Twiddle memoization init ---
+    // Initialize twiddles lazily; recompute if n or m changed.
+    if (!twiddles_initialized || twiddle_n != n || twiddle_m != m) {
+        fft_init_twiddles(n, m);
+    }
+
+
+    // --- FFT butterfly stages ---
+    b = 1;
+
+    for (j = 0; j < m; j++) { // for each stage (power of 2)
+        int stage = j;
+        int stage_base = twiddle_stage_offset[stage];
+
+        //MATH (PREVIOUS RUNTIME TRIG VERSION - NOW COMMENTED OUT)
+        /*
+        k = 0;
+        // twiddle for k=0 is 1 + j0, so start with that
+        float cos_k = 1.0f;
+        float sin_k = 0.0f;
+        float angle;
+
+        for (i = 0; i < n; i += 2) { // for each pair
+            if (i % (n / b) == 0 && i != 0) {
+                // increment k every n/b points, then update twiddle once per k
+                k++;
+                angle = -PI * (float)k / (float)b;
+                cos_k = cosine(angle);
+                sin_k = sine(angle);
+            }
+
+            // complex value at i+1: xr + j xi
+            float xr = q[i+1];
+            float xi = w[i+1];
+
+            // (xr + j xi) * (cos_k + j sin_k)
+            real    = xr * cos_k - xi * sin_k;
+            imagine = xr * sin_k + xi * cos_k;
+
+            // butterfly
+            new_[i]     = q[i] + real;
+            new_im[i]   = w[i] + imagine;
+            new_[i+1]   = q[i] - real;
+            new_im[i+1] = w[i] - imagine;
+        }
+
+        for (i = 0; i < n; i++) {
+            q[i] = new_[i];
+            w[i] = new_im[i];
+        }
+        */
+        //END MATH (PREVIOUS RUNTIME TRIG VERSION)
+
+        // --- MATH (MEMOIZED TWIDDLE VERSION) ---
+        {
+            k = 0;
+            float cos_k = 1.0f;  // twiddle for k=0 is (1 + j0)
+            float sin_k = 0.0f;
+
+            for (i = 0; i < n; i += 2) { // for each pair
+                // increment k every n/b points, then load twiddle from table
+                if (i % (n / b) == 0 && i != 0) {
+                    k++;
+                    Twiddle t = twiddle_table[stage_base + k];
+                    cos_k = t.cosv;
+                    sin_k = t.sinv;
+                }
+
+                float xr = q[i+1];
+                float xi = w[i+1];
+
+                // (xr + j xi) * (cos_k + j sin_k)
+                real    = xr * cos_k - xi * sin_k;
+                imagine = xr * sin_k + xi * cos_k;
+
+                // butterfly
+                new_[i]     = q[i] + real;
+                new_im[i]   = w[i] + imagine;
+                new_[i+1]   = q[i] - real;
+                new_im[i+1] = w[i] - imagine;
+            }
+
+            for (i = 0; i < n; i++) {
+                q[i] = new_[i];
+                w[i] = new_im[i];
+            }
+        }
+        // --- END MATH (MEMOIZED TWIDDLE VERSION) ---
+
+        // --- REORDER within each stage (your existing approach) ---
+        for (i = 0; i < n/2; i++) {
+            new_[i]         = q[2*i];
+            new_[i+(n/2)]   = q[2*i+1];
+            new_im[i]       = w[2*i];
+            new_im[i+(n/2)] = w[2*i+1];
+        }
+        for (i = 0; i < n; i++) {
+            q[i] = new_[i];
+            w[i] = new_im[i];
+        }
+        // --- END REORDER ---
+
+        b *= 2;
+        k = 0;
+    }
+
+
+    // --- Magnitude computation and peak frequency estimate ---
+    max = 0.0f;
+    place = 1;
+    for (i = 1; i < (n/2); i++) {
+        new_[i] = q[i]*q[i] + w[i]*w[i]; // power = Re^2 + Im^2
+        if (max < new_[i]) {
+            max = new_[i];
+            place = i;
+        }
+    }
+
+    // bin spacing
+    {
+        float s = sample_f / (float)n;  // spacing between bins
+        frequency = s * (float)place;
+
+        // Parabolic interpolation around the peak for sub-bin accuracy
+        // Using three points: y1 (bin-1), y2 (bin), y3 (bin+1)
+        float y1 = new_[place-1];
+        float y2 = new_[place];
+        float y3 = new_[place+1];
+
+        // x0 is the sub-bin position of the peak in Hz-space.
+        // This is the existing curve-fit you had.
+        float x0 = s + (2.0f * s * (y2 - y1)) / (2.0f*y2 - y1 - y3);
+        x0 = x0 / s - 1.0f;
+
+        if (x0 < 0.0f || x0 > 2.0f) {
+            // error in curve fitting, return 0
+            return 0.0f;
+        }
+
+        if (x0 <= 1.0f) {
+            frequency = frequency - (1.0f - x0) * s;
+        } else {
+            frequency = frequency + (x0 - 1.0f) * s;
+        }
+    }
+
+    return frequency;
+    // (Yes, the FFT core itself can still be optimized further, but this
+    // keeps your structure while removing runtime trig.)
+}

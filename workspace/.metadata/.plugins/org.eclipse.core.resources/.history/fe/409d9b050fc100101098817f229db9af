@@ -1,0 +1,14 @@
+#include <stdio.h>
+#include "xil_cache.h"
+#include <mb_interface.h>
+
+#include "xparameters.h"
+#include <xil_types.h>
+#include <xil_assert.h>
+
+#include <xio.h>
+#include "xtmrctr.h"
+XIntc    sys_intc1;
+XTmrCtr timer1;//moved here so that main can access and the performacne analyzer init can access it
+
+void performance_analyzer_init();

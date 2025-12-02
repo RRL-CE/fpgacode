@@ -1,0 +1,183 @@
+#include "extra.h"
+#include <stdlib.h>
+#include "xparameters.h"
+#include "xgpio.h"
+#include "sevenSeg_new.h"
+
+XIntc   sys_intc;
+XTmrCtr sys_tmrctr;    /* AXI_TIMER_0 */
+XTmrCtr sys_tmrctr1;   /* AXI_TIMER_1 */
+static XGpio btn_gpio;
+
+#define MAX_COUNT 9999999U
+volatile int timer_0_interupted = 0;
+volatile int timer_1_interupted = 0;
+static volatile u8 reset_db = 0, start_db = 0, stop_db = 0, fwd_db = 0, back_db = 0;
+
+volatile unsigned int counter = 0;
+volatile int pos = 0;          // logical digit index (0..6)
+volatile int dir = +1;         // +1 up, -1 down
+volatile int running = 0;      // 0 stop, 1 run
+
+#define RESET_BTN_MASK     0x01u
+#define START_BTN_MASK     0x02u
+#define STOP_BTN_MASK      0x04u
+#define FORWARD_BTN_MASK   0x08u
+#define BACKWARD_BTN_MASK  0x10u
+#define ALL_BTN_MASK (RESET_BTN_MASK|START_BTN_MASK|STOP_BTN_MASK|FORWARD_BTN_MASK|BACKWARD_BTN_MASK)
+
+volatile int reset_button_event = 0;
+volatile int start_button_event = 0;
+volatile int stop_button_event = 0;
+volatile int forward_button_event = 0;
+volatile int backward_button_event = 0;
+
+static volatile u32 btn_prev        = 0;
+static volatile u32 btn_enable_mask = ALL_BTN_MASK;  /* all buttons armed by default */
+
+
+static inline int get_digit_at_pos(unsigned int num, int pos)
+{
+    for (int i = 0; i < pos; i++) num /= 10;
+    return num % 10;
+}
+
+
+static void universal_button_handler(void *CallbackRef)
+{
+    XGpio *GpioPtr = (XGpio *)CallbackRef;
+
+    u32 istatus = XGpio_InterruptGetStatus(GpioPtr);
+    if (istatus & 0x1u) {
+        u32 curr    = XGpio_DiscreteRead(GpioPtr, 1);
+        u32 changed = curr ^ btn_prev;
+        u32 rising  = changed & curr;
+
+        if ((btn_enable_mask & RESET_BTN_MASK)    && (rising & RESET_BTN_MASK))    { counter = 0;    }
+        if ((btn_enable_mask & START_BTN_MASK)    && (rising & START_BTN_MASK))    { running = 1;    }
+        if ((btn_enable_mask & STOP_BTN_MASK)     && (rising & STOP_BTN_MASK))     { running = 0;     }
+        if ((btn_enable_mask & FORWARD_BTN_MASK)  && (rising & FORWARD_BTN_MASK))  { dir=1;  }
+        if ((btn_enable_mask & BACKWARD_BTN_MASK) && (rising & BACKWARD_BTN_MASK)) { dir=0; }
+
+        btn_prev = curr;
+        XGpio_InterruptClear(GpioPtr, 0x1u);                /* clear GPIO ch1 IRQ */
+    }
+}
+
+XStatus universal_button_enable(void)
+{
+    XStatus Status;
+
+    Status = XGpio_Initialize(&btn_gpio, XPAR_AXI_GPIO_BTN_DEVICE_ID);
+    if (Status != XST_SUCCESS) return Status;
+
+    XGpio_SetDataDirection(&btn_gpio, 1, 0xFFFFFFFFu);
+    btn_prev = XGpio_DiscreteRead(&btn_gpio, 1);
+
+    XGpio_InterruptClear(&btn_gpio, 0xFFFFFFFFu);          /* clear pending */
+    XGpio_InterruptEnable(&btn_gpio, 0x1u);                /* enable ch1 IRQ */
+    XGpio_InterruptGlobalEnable(&btn_gpio);                /* unmask device */
+
+    btn_enable_mask = ALL_BTN_MASK;                        /* arm all buttons */
+    return XST_SUCCESS;
+}
+
+XStatus interupt_enable(void)
+{
+    XStatus Status;
+
+    Status = XIntc_Initialize(&sys_intc, XPAR_MICROBLAZE_0_AXI_INTC_DEVICE_ID);  /* init INTC (device id) */
+    if (Status != XST_SUCCESS) return Status;
+
+    Status = XIntc_Connect(&sys_intc,
+                           XPAR_MICROBLAZE_0_AXI_INTC_AXI_TIMER_0_INTERRUPT_INTR, /* vector id: timer0 */
+                           (XInterruptHandler)timer_0_handler,
+                           &sys_tmrctr);
+    if (Status != XST_SUCCESS) return Status;
+
+    Status = XIntc_Connect(&sys_intc,
+                           XPAR_MICROBLAZE_0_AXI_INTC_AXI_TIMER_1_INTERRUPT_INTR, /* vector id: timer1 */
+                           (XInterruptHandler)timer_1_handler,
+                           &sys_tmrctr1);
+    if (Status != XST_SUCCESS) return Status;
+
+    Status = XIntc_Connect(&sys_intc,
+                           XPAR_MICROBLAZE_0_AXI_INTC_AXI_GPIO_BTN_IP2INTC_IRPT_INTR, /* vector id: gpio btn */
+                           (XInterruptHandler)universal_button_handler,
+                           &btn_gpio);
+    if (Status != XST_SUCCESS) return Status;
+
+    Status = XIntc_Start(&sys_intc, XIN_REAL_MODE);                                     /* enable INTC output */
+    if (Status != XST_SUCCESS) return Status;
+
+    XIntc_Enable(&sys_intc, XPAR_MICROBLAZE_0_AXI_INTC_AXI_TIMER_0_INTERRUPT_INTR);    /* unmask timer0 */
+    XIntc_Enable(&sys_intc, XPAR_MICROBLAZE_0_AXI_INTC_AXI_TIMER_1_INTERRUPT_INTR);    /* unmask timer1 */
+    XIntc_Enable(&sys_intc, XPAR_MICROBLAZE_0_AXI_INTC_AXI_GPIO_BTN_IP2INTC_IRPT_INTR);/* unmask gpio  */
+
+    microblaze_register_handler((XInterruptHandler)XIntc_DeviceInterruptHandler,
+                                (void*)XPAR_MICROBLAZE_0_AXI_INTC_DEVICE_ID);         /* register INTC top */
+    microblaze_enable_interrupts();                                                    /* MSR[IE]=1 */
+
+    return XST_SUCCESS;
+}
+
+XStatus timer_0_enable(void){
+    XStatus Status;
+
+    Status = XTmrCtr_Initialize(&sys_tmrctr, XPAR_AXI_TIMER_0_DEVICE_ID);
+    if (Status != XST_SUCCESS) return Status;
+
+    XTmrCtr_SetOptions(&sys_tmrctr, 0, XTC_INT_MODE_OPTION | XTC_AUTO_RELOAD_OPTION);
+    XTmrCtr_SetResetValue(&sys_tmrctr, 0, 0xFFFFFFFFu - 208333u  + 1u);//208333u
+    XTmrCtr_Start(&sys_tmrctr, 0);
+    return XST_SUCCESS;
+}
+
+void timer_0_handler(void *Ref){
+    XTmrCtr *tmr = (XTmrCtr*)Ref;
+    u32 csr = XTmrCtr_ReadReg(tmr->BaseAddress, 0, XTC_TCSR_OFFSET);
+    timer_0_interupted++;
+    timer_0_interupted = 0;
+
+    int val = get_digit_at_pos(counter, pos);  // logical digit 0..6
+    sevenseg_draw_digit(pos + 1, val);         // draw at physical 1..7 (skips physical 0)
+
+    pos = (pos + 1) % 7;  // cycle 0..6
+    XTmrCtr_WriteReg(tmr->BaseAddress, 0, XTC_TCSR_OFFSET, csr | XTC_CSR_INT_OCCURED_MASK); /* ack timer0 */
+}
+
+XStatus timer_1_enable(void){
+    XStatus Status;
+
+    Status = XTmrCtr_Initialize(&sys_tmrctr1, XPAR_AXI_TIMER_1_DEVICE_ID);
+    if (Status != XST_SUCCESS) return Status;
+
+    XTmrCtr_SetOptions(&sys_tmrctr1, 0, XTC_INT_MODE_OPTION | XTC_AUTO_RELOAD_OPTION);
+    XTmrCtr_SetResetValue(&sys_tmrctr1, 0, 0xFFFFFFFFu - 100000u + 1u);//100000u
+    XTmrCtr_Start(&sys_tmrctr1, 0);
+    return XST_SUCCESS;
+}
+
+void timer_1_handler(void *Ref){
+    XTmrCtr *tmr = (XTmrCtr*)Ref;
+    u32 csr = XTmrCtr_ReadReg(tmr->BaseAddress, 0, XTC_TCSR_OFFSET);
+    timer_1_interupted++;
+    timer_1_interupted = 0;
+
+                if (running) {
+                    if (dir > 0) {
+                        if (counter < MAX_COUNT) counter++;
+                        else running = 0;  // stop at all 9s
+                    } else {
+                        if (counter > 0) counter--;
+                        else running = 0;  // stop at all zeros
+                    }
+                }
+    XTmrCtr_WriteReg(tmr->BaseAddress, 0, XTC_TCSR_OFFSET, csr | XTC_CSR_INT_OCCURED_MASK); /* ack timer1 */
+    if (reset_db)  reset_db--;
+    if (start_db)  start_db--;
+    if (stop_db)   stop_db--;
+    if (fwd_db)    fwd_db--;
+    if (back_db)   back_db--;
+
+}

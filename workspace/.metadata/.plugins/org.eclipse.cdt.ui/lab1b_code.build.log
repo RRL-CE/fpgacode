@@ -1,0 +1,38 @@
+07:22:21 **** Build of configuration Debug for project lab1b_code ****
+make all 
+make: Warning: File 'objects.mk' has modification time 110 s in the future
+Building file: ../src/extra.c
+Invoking: MicroBlaze gcc compiler
+mb-gcc -Wall -O0 -g3 -c -fmessage-length=0 -MT"src/extra.o" -I/home/rrlingam/workspace/lab1b/export/lab1b/sw/lab1b/standalone_microblaze_0/bspinclude/include -mlittle-endian -mxl-barrel-shift -mno-xl-soft-div -mcpu=v11.0 -mno-xl-soft-mul -Wl,--no-relax -ffunction-sections -fdata-sections -MMD -MP -MF"src/extra.d" -MT"src/extra.o" -o "src/extra.o" "../src/extra.c"
+Finished building: ../src/extra.c
+ 
+Building file: ../src/main.c
+Invoking: MicroBlaze gcc compiler
+mb-gcc -Wall -O0 -g3 -c -fmessage-length=0 -MT"src/main.o" -I/home/rrlingam/workspace/lab1b/export/lab1b/sw/lab1b/standalone_microblaze_0/bspinclude/include -mlittle-endian -mxl-barrel-shift -mno-xl-soft-div -mcpu=v11.0 -mno-xl-soft-mul -Wl,--no-relax -ffunction-sections -fdata-sections -MMD -MP -MF"src/main.d" -MT"src/main.o" -o "src/main.o" "../src/main.c"
+Finished building: ../src/main.c
+ 
+Building file: ../src/platform.c
+Invoking: MicroBlaze gcc compiler
+mb-gcc -Wall -O0 -g3 -c -fmessage-length=0 -MT"src/platform.o" -I/home/rrlingam/workspace/lab1b/export/lab1b/sw/lab1b/standalone_microblaze_0/bspinclude/include -mlittle-endian -mxl-barrel-shift -mno-xl-soft-div -mcpu=v11.0 -mno-xl-soft-mul -Wl,--no-relax -ffunction-sections -fdata-sections -MMD -MP -MF"src/platform.d" -MT"src/platform.o" -o "src/platform.o" "../src/platform.c"
+Finished building: ../src/platform.c
+ 
+Building file: ../src/sevenSeg_new.c
+Invoking: MicroBlaze gcc compiler
+mb-gcc -Wall -O0 -g3 -c -fmessage-length=0 -MT"src/sevenSeg_new.o" -I/home/rrlingam/workspace/lab1b/export/lab1b/sw/lab1b/standalone_microblaze_0/bspinclude/include -mlittle-endian -mxl-barrel-shift -mno-xl-soft-div -mcpu=v11.0 -mno-xl-soft-mul -Wl,--no-relax -ffunction-sections -fdata-sections -MMD -MP -MF"src/sevenSeg_new.d" -MT"src/sevenSeg_new.o" -o "src/sevenSeg_new.o" "../src/sevenSeg_new.c"
+Finished building: ../src/sevenSeg_new.c
+ 
+Building target: lab1b_code.elf
+Invoking: MicroBlaze gcc linker
+mb-gcc -Wl,-T -Wl,../src/lscript.ld -L/home/rrlingam/workspace/lab1b/export/lab1b/sw/lab1b/standalone_microblaze_0/bsplib/lib -mlittle-endian -mxl-barrel-shift -mno-xl-soft-div -mcpu=v11.0 -mno-xl-soft-mul -Wl,--no-relax -Wl,--gc-sections -o "lab1b_code.elf"  ./src/extra.o ./src/main.o ./src/platform.o ./src/sevenSeg_new.o   -Wl,--start-group,-lxil,-lgcc,-lc,--end-group
+Finished building target: lab1b_code.elf
+ 
+Invoking: MicroBlaze Print Size
+mb-size lab1b_code.elf  |tee "lab1b_code.elf.size"
+   text	   data	    bss	    dec	    hex	filename
+   9632	    428	   8540	  18600	   48a8	lab1b_code.elf
+Finished building: lab1b_code.elf.size
+ 
+make: warning:  Clock skew detected.  Your build may be incomplete.
+
+07:22:21 Build Finished (took 666ms)
+

@@ -1,0 +1,97 @@
+#include <string.h>
+#include "xparameters.h"
+#include "xstatus.h"
+#include "xintc.h"
+#include "xtmrctr.h"
+#include "xil_printf.h"
+
+
+
+void performance_analyzer_setup_buckets(void)
+{
+    // Reset profiler configuration and counts
+    Prof_InitConfig();
+    Prof_ClearCounts();
+
+    uint16_t next_bucket = 0;
+
+    /******************************************************************
+     * Region 0:
+     *   Address range: 0x8000fc40 - 0x8000fda0
+     *   Size:          352 bytes
+     *   Requested granularity ~44 bytes → use 32-byte buckets (shift=5)
+     *   Bucket size:   2^5 = 32 bytes
+     *   Buckets needed: ceil(352 / 32) = 11
+     *   Uses bucket_counts[next_bucket .. next_bucket + 10]
+     ******************************************************************/
+    {
+        const uint32_t r0_start = 0x8000fc40u;
+        const uint32_t r0_end   = 0x8000fda0u;
+        const uint8_t  r0_shift = 5u;                 // 32-byte buckets
+
+        const uint32_t r0_size  = r0_end - r0_start;  // 352
+        const uint32_t r0_bsize = 1u << r0_shift;     // 32
+        const uint16_t r0_nbuck =
+            (uint16_t)((r0_size + r0_bsize - 1u) / r0_bsize); // ceil
+
+        // Optional sanity print (remove if you want it silent)
+        xil_printf("Region 0: size=%lu, bucket_size=%lu, buckets=%u, first_bucket=%u\r\n",
+                   (unsigned long)r0_size,
+                   (unsigned long)r0_bsize,
+                   (unsigned)r0_nbuck,
+                   (unsigned)next_bucket);
+
+        (void)Prof_AddRegion(r0_start, r0_end,
+                             r0_shift,
+                             next_bucket,
+                             r0_nbuck);
+
+        next_bucket += r0_nbuck; // reserve these buckets
+    }
+
+    /******************************************************************
+     * Region 1:
+     *   Address range: 0x8000f084 - 0x8000fc3c
+     *   Size:          3000 bytes
+     *   Requested granularity ~300 bytes → use 256-byte buckets (shift=8)
+     *   Bucket size:   2^8 = 256 bytes
+     *   Buckets needed: ceil(3000 / 256) = 12
+     *   Uses bucket_counts[next_bucket .. next_bucket + 11]
+     ******************************************************************/
+    {
+        const uint32_t r1_start = 0x8000f084u;
+        const uint32_t r1_end   = 0x8000fc3cu;
+        const uint8_t  r1_shift = 8u;                 // 256-byte buckets
+
+        const uint32_t r1_size  = r1_end - r1_start;  // 3000
+        const uint32_t r1_bsize = 1u << r1_shift;     // 256
+        const uint16_t r1_nbuck =
+            (uint16_t)((r1_size + r1_bsize - 1u) / r1_bsize); // ceil
+
+        xil_printf("Region 1: size=%lu, bucket_size=%lu, buckets=%u, first_bucket=%u\r\n",
+                   (unsigned long)r1_size,
+                   (unsigned long)r1_bsize,
+                   (unsigned)r1_nbuck,
+                   (unsigned)next_bucket);
+
+        (void)Prof_AddRegion(r1_start, r1_end,
+                             r1_shift,
+                             next_bucket,
+                             r1_nbuck);
+
+        next_bucket += r1_nbuck;
+    }
+
+    /******************************************************************
+     * Safety: make sure we didn't run out of bucket space.
+     * We keep "other" at the last bucket (PROF_MAX_BUCKETS - 1).
+     ******************************************************************/
+    if (next_bucket >= (PROF_MAX_BUCKETS - 1)) {
+        xil_printf("WARNING: profiler bucket space exhausted (next_bucket=%u)\r\n",
+                   (unsigned)next_bucket);
+        // You can handle this however you want (assert, clamp, etc.)
+    }
+
+    // "Other" bucket: anything not in one of the regions above
+    Prof_SetOtherBucket(PROF_MAX_BUCKETS - 1);
+}

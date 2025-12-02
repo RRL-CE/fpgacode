@@ -1,0 +1,237 @@
+21:00:36 **** Incremental Build of configuration Debug for project lab2b_code ****
+make all 
+Building file: ../src/bsp.c
+Invoking: MicroBlaze gcc compiler
+mb-gcc -Wall -O0 -g3 -c -fmessage-length=0 -MT"src/bsp.o" -I/home/rrlingam/workspace/lab2b_platform/export/lab2b_platform/sw/lab2b_platform/standalone_microblaze_0/bspinclude/include -mlittle-endian -mxl-barrel-shift -mno-xl-soft-div -mcpu=v11.0 -mno-xl-soft-mul -Wl,--no-relax -ffunction-sections -fdata-sections -MMD -MP -MF"src/bsp.d" -MT"src/bsp.o" -o "src/bsp.o" "../src/bsp.c"
+In file included from ../src/qpn_port.h:38,
+                 from ../src/bsp.c:13:
+/home/rrlingam/workspace/lab2b_platform/export/lab2b_platform/sw/lab2b_platform/standalone_microblaze_0/bspinclude/include/xbasic_types.h:102:2: warning: #warning The xbasics_type.h file is deprecated and users should use xil_types.h and xil_assert. [-Wcpp]
+  102 | #warning  The xbasics_type.h file is deprecated and users should use xil_types.h and xil_assert.
+      |  ^~~~~~~
+/home/rrlingam/workspace/lab2b_platform/export/lab2b_platform/sw/lab2b_platform/standalone_microblaze_0/bspinclude/include/xbasic_types.h:103:2: warning: #warning Please refer the Standalone BSP UG647 for further details [-Wcpp]
+  103 | #warning  Please refer the Standalone BSP UG647 for further details
+      |  ^~~~~~~
+In file included from /home/rrlingam/workspace/lab2b_platform/export/lab2b_platform/sw/lab2b_platform/standalone_microblaze_0/bspinclude/include/xgpio.h:116,
+                 from ../src/bsp.c:8:
+../src/bsp.c: In function 'BSP_init':
+/home/rrlingam/workspace/lab2b_platform/export/lab2b_platform/sw/lab2b_platform/standalone_microblaze_0/bspinclude/include/xstatus.h:43:41: warning: 'return' with a value, in function returning void [-Wreturn-type]
+   43 | #define XST_FAILURE                     1L
+      |                                         ^~
+../src/bsp.c:63:79: note: in expansion of macro 'XST_FAILURE'
+   63 |     if (Status != XST_SUCCESS) { xil_printf("RGBLED init failed\r\n"); return XST_FAILURE; }
+      |                                                                               ^~~~~~~~~~~
+../src/bsp.c:58:6: note: declared here
+   58 | void BSP_init(void) {
+      |      ^~~~~~~~
+In file included from /home/rrlingam/workspace/lab2b_platform/export/lab2b_platform/sw/lab2b_platform/standalone_microblaze_0/bspinclude/include/xgpio.h:116,
+                 from ../src/bsp.c:8:
+/home/rrlingam/workspace/lab2b_platform/export/lab2b_platform/sw/lab2b_platform/standalone_microblaze_0/bspinclude/include/xstatus.h:43:41: warning: 'return' with a value, in function returning void [-Wreturn-type]
+   43 | #define XST_FAILURE                     1L
+      |                                         ^~
+../src/bsp.c:65:77: note: in expansion of macro 'XST_FAILURE'
+   65 |     if (Status != XST_SUCCESS)  { xil_printf("LED init failed\r\n"); return XST_FAILURE; }
+      |                                                                             ^~~~~~~~~~~
+../src/bsp.c:58:6: note: declared here
+   58 | void BSP_init(void) {
+      |      ^~~~~~~~
+In file included from /home/rrlingam/workspace/lab2b_platform/export/lab2b_platform/sw/lab2b_platform/standalone_microblaze_0/bspinclude/include/xgpio.h:116,
+                 from ../src/bsp.c:8:
+/home/rrlingam/workspace/lab2b_platform/export/lab2b_platform/sw/lab2b_platform/standalone_microblaze_0/bspinclude/include/xstatus.h:43:41: warning: 'return' with a value, in function returning void [-Wreturn-type]
+   43 | #define XST_FAILURE                     1L
+      |                                         ^~
+../src/bsp.c:69:80: note: in expansion of macro 'XST_FAILURE'
+   69 |     if (Status != XST_SUCCESS) { xil_printf("ENCODER init failed\r\n"); return XST_FAILURE; }
+      |                                                                                ^~~~~~~~~~~
+../src/bsp.c:58:6: note: declared here
+   58 | void BSP_init(void) {
+      |      ^~~~~~~~
+In file included from /home/rrlingam/workspace/lab2b_platform/export/lab2b_platform/sw/lab2b_platform/standalone_microblaze_0/bspinclude/include/xgpio.h:116,
+                 from ../src/bsp.c:8:
+/home/rrlingam/workspace/lab2b_platform/export/lab2b_platform/sw/lab2b_platform/standalone_microblaze_0/bspinclude/include/xstatus.h:43:41: warning: 'return' with a value, in function returning void [-Wreturn-type]
+   43 | #define XST_FAILURE                     1L
+      |                                         ^~
+../src/bsp.c:75:81: note: in expansion of macro 'XST_FAILURE'
+   75 |     if (Status != XST_SUCCESS) { xil_printf("BTN GPIO init failed\r\n"); return XST_FAILURE; }
+      |                                                                                 ^~~~~~~~~~~
+../src/bsp.c:58:6: note: declared here
+   58 | void BSP_init(void) {
+      |      ^~~~~~~~
+In file included from /home/rrlingam/workspace/lab2b_platform/export/lab2b_platform/sw/lab2b_platform/standalone_microblaze_0/bspinclude/include/xgpio.h:116,
+                 from ../src/bsp.c:8:
+/home/rrlingam/workspace/lab2b_platform/export/lab2b_platform/sw/lab2b_platform/standalone_microblaze_0/bspinclude/include/xstatus.h:43:41: warning: 'return' with a value, in function returning void [-Wreturn-type]
+   43 | #define XST_FAILURE                     1L
+      |                                         ^~
+../src/bsp.c:85:16: note: in expansion of macro 'XST_FAILURE'
+   85 |         return XST_FAILURE;
+      |                ^~~~~~~~~~~
+../src/bsp.c:58:6: note: declared here
+   58 | void BSP_init(void) {
+      |      ^~~~~~~~
+In file included from /home/rrlingam/workspace/lab2b_platform/export/lab2b_platform/sw/lab2b_platform/standalone_microblaze_0/bspinclude/include/xgpio.h:116,
+                 from ../src/bsp.c:8:
+/home/rrlingam/workspace/lab2b_platform/export/lab2b_platform/sw/lab2b_platform/standalone_microblaze_0/bspinclude/include/xstatus.h:43:41: warning: 'return' with a value, in function returning void [-Wreturn-type]
+   43 | #define XST_FAILURE                     1L
+      |                                         ^~
+../src/bsp.c:93:77: note: in expansion of macro 'XST_FAILURE'
+   93 |     if (Status != XST_SUCCESS) { xil_printf("INTC init failed\r\n"); return XST_FAILURE; }
+      |                                                                             ^~~~~~~~~~~
+../src/bsp.c:58:6: note: declared here
+   58 | void BSP_init(void) {
+      |      ^~~~~~~~
+In file included from /home/rrlingam/workspace/lab2b_platform/export/lab2b_platform/sw/lab2b_platform/standalone_microblaze_0/bspinclude/include/xgpio.h:116,
+                 from ../src/bsp.c:8:
+/home/rrlingam/workspace/lab2b_platform/export/lab2b_platform/sw/lab2b_platform/standalone_microblaze_0/bspinclude/include/xstatus.h:42:41: warning: 'return' with a value, in function returning void [-Wreturn-type]
+   42 | #define XST_SUCCESS                     0L
+      |                                         ^~
+../src/bsp.c:95:12: note: in expansion of macro 'XST_SUCCESS'
+   95 |     return XST_SUCCESS;
+      |            ^~~~~~~~~~~
+../src/bsp.c:58:6: note: declared here
+   58 | void BSP_init(void) {
+      |      ^~~~~~~~
+../src/bsp.c: In function 'EncoderIsr':
+../src/bsp.c:262:25: warning: passing argument 1 of 'QActive_postISR' from incompatible pointer type [-Wincompatible-pointer-types]
+  262 |         QActive_postISR(&AO_Lab2B, ENCODER_CLICK);
+      |                         ^~~~~~~~~
+      |                         |
+      |                         struct Lab2BTag *
+In file included from ../src/qpn_port.h:29,
+                 from ../src/bsp.c:13:
+../src/qfn.h:231:35: note: expected 'QActive *' {aka 'struct QActiveTag *'} but argument is of type 'struct Lab2BTag *'
+  231 |     void QActive_postISR(QActive *me, QSignal sig);
+      |                          ~~~~~~~~~^~
+../src/bsp.c:287:29: warning: passing argument 1 of 'QActive_postISR' from incompatible pointer type [-Wincompatible-pointer-types]
+  287 |             QActive_postISR(&AO_Lab2B, ENCODER_DOWN);
+      |                             ^~~~~~~~~
+      |                             |
+      |                             struct Lab2BTag *
+In file included from ../src/qpn_port.h:29,
+                 from ../src/bsp.c:13:
+../src/qfn.h:231:35: note: expected 'QActive *' {aka 'struct QActiveTag *'} but argument is of type 'struct Lab2BTag *'
+  231 |     void QActive_postISR(QActive *me, QSignal sig);
+      |                          ~~~~~~~~~^~
+../src/bsp.c:301:29: warning: passing argument 1 of 'QActive_postISR' from incompatible pointer type [-Wincompatible-pointer-types]
+  301 |             QActive_postISR(&AO_Lab2B, ENCODER_UP);
+      |                             ^~~~~~~~~
+      |                             |
+      |                             struct Lab2BTag *
+In file included from ../src/qpn_port.h:29,
+                 from ../src/bsp.c:13:
+../src/qfn.h:231:35: note: expected 'QActive *' {aka 'struct QActiveTag *'} but argument is of type 'struct Lab2BTag *'
+  231 |     void QActive_postISR(QActive *me, QSignal sig);
+      |                          ~~~~~~~~~^~
+../src/bsp.c: In function 'universal_button_handler':
+../src/bsp.c:329:98: warning: passing argument 1 of 'QActive_postISR' from incompatible pointer type [-Wincompatible-pointer-types]
+  329 |     if ((btn_enable_mask & RESET_BTN_MASK)    && (rising & RESET_BTN_MASK))    { QActive_postISR(&AO_Lab2B, BUT_1); }//XGpio_DiscreteWrite(&rgbled,1,3); }
+      |                                                                                                  ^~~~~~~~~
+      |                                                                                                  |
+      |                                                                                                  struct Lab2BTag *
+In file included from ../src/qpn_port.h:29,
+                 from ../src/bsp.c:13:
+../src/qfn.h:231:35: note: expected 'QActive *' {aka 'struct QActiveTag *'} but argument is of type 'struct Lab2BTag *'
+  231 |     void QActive_postISR(QActive *me, QSignal sig);
+      |                          ~~~~~~~~~^~
+../src/bsp.c:330:98: warning: passing argument 1 of 'QActive_postISR' from incompatible pointer type [-Wincompatible-pointer-types]
+  330 |     if ((btn_enable_mask & START_BTN_MASK)    && (rising & START_BTN_MASK))    { QActive_postISR(&AO_Lab2B, BUT_2); }//XGpio_DiscreteWrite(&rgbled,1,4); }
+      |                                                                                                  ^~~~~~~~~
+      |                                                                                                  |
+      |                                                                                                  struct Lab2BTag *
+In file included from ../src/qpn_port.h:29,
+                 from ../src/bsp.c:13:
+../src/qfn.h:231:35: note: expected 'QActive *' {aka 'struct QActiveTag *'} but argument is of type 'struct Lab2BTag *'
+  231 |     void QActive_postISR(QActive *me, QSignal sig);
+      |                          ~~~~~~~~~^~
+../src/bsp.c:331:98: warning: passing argument 1 of 'QActive_postISR' from incompatible pointer type [-Wincompatible-pointer-types]
+  331 |     if ((btn_enable_mask & STOP_BTN_MASK)     && (rising & STOP_BTN_MASK))     { QActive_postISR(&AO_Lab2B, BUT_3); }//XGpio_DiscreteWrite(&rgbled,1,5); }
+      |                                                                                                  ^~~~~~~~~
+      |                                                                                                  |
+      |                                                                                                  struct Lab2BTag *
+In file included from ../src/qpn_port.h:29,
+                 from ../src/bsp.c:13:
+../src/qfn.h:231:35: note: expected 'QActive *' {aka 'struct QActiveTag *'} but argument is of type 'struct Lab2BTag *'
+  231 |     void QActive_postISR(QActive *me, QSignal sig);
+      |                          ~~~~~~~~~^~
+../src/bsp.c:332:98: warning: passing argument 1 of 'QActive_postISR' from incompatible pointer type [-Wincompatible-pointer-types]
+  332 |     if ((btn_enable_mask & FORWARD_BTN_MASK)  && (rising & FORWARD_BTN_MASK))  { QActive_postISR(&AO_Lab2B, BUT_4); }//XGpio_DiscreteWrite(&rgbled,1,6); }
+      |                                                                                                  ^~~~~~~~~
+      |                                                                                                  |
+      |                                                                                                  struct Lab2BTag *
+In file included from ../src/qpn_port.h:29,
+                 from ../src/bsp.c:13:
+../src/qfn.h:231:35: note: expected 'QActive *' {aka 'struct QActiveTag *'} but argument is of type 'struct Lab2BTag *'
+  231 |     void QActive_postISR(QActive *me, QSignal sig);
+      |                          ~~~~~~~~~^~
+../src/bsp.c:333:98: warning: passing argument 1 of 'QActive_postISR' from incompatible pointer type [-Wincompatible-pointer-types]
+  333 |     if ((btn_enable_mask & BACKWARD_BTN_MASK) && (rising & BACKWARD_BTN_MASK)) { QActive_postISR(&AO_Lab2B, BUT_5); }//XGpio_DiscreteWrite(&rgbled,1,7); }
+      |                                                                                                  ^~~~~~~~~
+      |                                                                                                  |
+      |                                                                                                  struct Lab2BTag *
+In file included from ../src/qpn_port.h:29,
+                 from ../src/bsp.c:13:
+../src/qfn.h:231:35: note: expected 'QActive *' {aka 'struct QActiveTag *'} but argument is of type 'struct Lab2BTag *'
+  231 |     void QActive_postISR(QActive *me, QSignal sig);
+      |                          ~~~~~~~~~^~
+../src/bsp.c: In function 'TimerIsr':
+../src/bsp.c:350:25: warning: passing argument 1 of 'QActive_postISR' from incompatible pointer type [-Wincompatible-pointer-types]
+  350 |         QActive_postISR(&AO_Lab2B, WAITED);
+      |                         ^~~~~~~~~
+      |                         |
+      |                         struct Lab2BTag *
+In file included from ../src/qpn_port.h:29,
+                 from ../src/bsp.c:13:
+../src/qfn.h:231:35: note: expected 'QActive *' {aka 'struct QActiveTag *'} but argument is of type 'struct Lab2BTag *'
+  231 |     void QActive_postISR(QActive *me, QSignal sig);
+      |                          ~~~~~~~~~^~
+At top level:
+../src/bsp.c:216:16: warning: 'enc_btn_counter' defined but not used [-Wunused-variable]
+  216 | static uint8_t enc_btn_counter  = 0;  // debounce counter
+      |                ^~~~~~~~~~~~~~~
+../src/bsp.c:215:16: warning: 'enc_btn_raw_prev' defined but not used [-Wunused-variable]
+  215 | static uint8_t enc_btn_raw_prev = 0;  // last raw read
+      |                ^~~~~~~~~~~~~~~~
+../src/bsp.c:214:16: warning: 'enc_btn_stable' defined but not used [-Wunused-variable]
+  214 | static uint8_t enc_btn_stable   = 0;  // last accepted stable state
+      |                ^~~~~~~~~~~~~~
+Finished building: ../src/bsp.c
+ 
+Building file: ../src/lab2b.c
+Invoking: MicroBlaze gcc compiler
+mb-gcc -Wall -O0 -g3 -c -fmessage-length=0 -MT"src/lab2b.o" -I/home/rrlingam/workspace/lab2b_platform/export/lab2b_platform/sw/lab2b_platform/standalone_microblaze_0/bspinclude/include -mlittle-endian -mxl-barrel-shift -mno-xl-soft-div -mcpu=v11.0 -mno-xl-soft-mul -Wl,--no-relax -ffunction-sections -fdata-sections -MMD -MP -MF"src/lab2b.d" -MT"src/lab2b.o" -o "src/lab2b.o" "../src/lab2b.c"
+In file included from ../src/qpn_port.h:38,
+                 from ../src/lab2b.c:3:
+/home/rrlingam/workspace/lab2b_platform/export/lab2b_platform/sw/lab2b_platform/standalone_microblaze_0/bspinclude/include/xbasic_types.h:102:2: warning: #warning The xbasics_type.h file is deprecated and users should use xil_types.h and xil_assert. [-Wcpp]
+  102 | #warning  The xbasics_type.h file is deprecated and users should use xil_types.h and xil_assert.
+      |  ^~~~~~~
+/home/rrlingam/workspace/lab2b_platform/export/lab2b_platform/sw/lab2b_platform/standalone_microblaze_0/bspinclude/include/xbasic_types.h:103:2: warning: #warning Please refer the Standalone BSP UG647 for further details [-Wcpp]
+  103 | #warning  Please refer the Standalone BSP UG647 for further details
+      |  ^~~~~~~
+../src/lab2b.c: In function 'clearVolumeBar':
+../src/lab2b.c:50:5: warning: implicit declaration of function 'redrawTrianglesInRect' [-Wimplicit-function-declaration]
+   50 |     redrawTrianglesInRect(VOL_X_START, x, VOL_Y_TOP, VOL_Y_BOTTOM);
+      |     ^~~~~~~~~~~~~~~~~~~~~
+../src/lab2b.c: At top level:
+../src/lab2b.c:75:6: warning: conflicting types for 'redrawTrianglesInRect'; have 'void(int,  int,  int,  int)'
+   75 | void redrawTrianglesInRect(int x1, int x2, int y_top, int y_bot) {
+      |      ^~~~~~~~~~~~~~~~~~~~~
+../src/lab2b.c:50:5: note: previous implicit declaration of 'redrawTrianglesInRect' with type 'void(int,  int,  int,  int)'
+   50 |     redrawTrianglesInRect(VOL_X_START, x, VOL_Y_TOP, VOL_Y_BOTTOM);
+      |     ^~~~~~~~~~~~~~~~~~~~~
+../src/lab2b.c:164:15: warning: 'Lab2B_Mute' declared 'static' but never defined [-Wunused-function]
+  164 | static QState Lab2B_Mute    (Lab2B *me);
+      |               ^~~~~~~~~~
+Finished building: ../src/lab2b.c
+ 
+Building target: lab2b_code.elf
+Invoking: MicroBlaze gcc linker
+mb-gcc -Wl,-T -Wl,../src/lscript.ld -L/home/rrlingam/workspace/lab2b_platform/export/lab2b_platform/sw/lab2b_platform/standalone_microblaze_0/bsplib/lib -mlittle-endian -mxl-barrel-shift -mno-xl-soft-div -mcpu=v11.0 -mno-xl-soft-mul -Wl,--no-relax -Wl,--gc-sections -o "lab2b_code.elf"  ./src/bsp.o ./src/fonts.o ./src/lab2a.o ./src/lab2b.o ./src/lcd.o ./src/lcd_test.o ./src/main.o ./src/platform.o ./src/qepn.o ./src/qfn.o ./src/qfn_init.o   -Wl,--start-group,-lxil,-lgcc,-lc,--end-group
+Finished building target: lab2b_code.elf
+ 
+Invoking: MicroBlaze Print Size
+mb-size lab2b_code.elf  |tee "lab2b_code.elf.size"
+   text	   data	    bss	    dec	    hex	filename
+  26544	   4704	   3592	  34840	   8818	lab2b_code.elf
+Finished building: lab2b_code.elf.size
+ 
+
+21:00:37 Build Finished (took 889ms)
+

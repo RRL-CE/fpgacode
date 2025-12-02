@@ -1,0 +1,70 @@
+#ifndef PERF_ANALYZER_H
+#define PERF_ANALYZER_H
+
+#include <stdint.h>
+#include "xtmrctr.h"
+#include <stdio.h>
+#include "xil_cache.h"
+#include <mb_interface.h>
+
+#include "xparameters.h"
+#include <xil_types.h>
+#include <xil_assert.h>
+
+#include <xio.h>
+#include "xtmrctr.h"
+
+#define PROF_MAX_REGIONS   8
+#define PROF_MAX_BUCKETS   256
+
+static uint16_t g_next_bucket = 0;
+
+static void Prof_AddRegionAuto(uint32_t start_addr,
+                               uint32_t end_addr,
+                               uint8_t  bucket_shift)
+{
+    uint32_t size       = end_addr - start_addr;
+    uint32_t bucket_sz  = 1u << bucket_shift;
+    uint16_t num_buckets =
+        (uint16_t)((size + bucket_sz - 1u) / bucket_sz);   // ceil
+
+    Prof_AddRegion(start_addr, end_addr,
+                   bucket_shift,
+                   g_next_bucket,
+                   num_buckets);
+
+    g_next_bucket += num_buckets;
+}
+
+
+typedef struct {
+    uint32_t start_addr;
+    uint32_t end_addr;
+    uint16_t first_bucket;
+    uint8_t  bucket_shift;
+    uint8_t  enabled;
+} ProfRegionConfig;
+
+typedef struct {
+    uint32_t          num_regions;
+    ProfRegionConfig  regions[PROF_MAX_REGIONS];
+    uint16_t          other_bucket;
+    volatile uint32_t bucket_counts[PROF_MAX_BUCKETS];
+} ProfConfig;
+
+// Globals
+ProfConfig g_prof;
+XTmrCtr    timer1;
+XIntc      sys_intc1;
+
+// Forward decls (matching the header)
+void Prof_InitConfig(void);
+void Prof_ClearCounts(void);
+int Prof_AddRegion(uint32_t start_addr, uint32_t end_addr,
+                   uint8_t bucket_shift,
+                   uint16_t first_bucket, uint16_t num_buckets);
+void Prof_SetOtherBucket(uint16_t idx);
+int  performance_analyzer_init(void);
+void performance_analyzer_setup_buckets(void);
+void per_anal_ISR(void *CallBackRef, u8 TmrCtrNumber);
+#endif

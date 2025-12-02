@@ -1,0 +1,35 @@
+#ifndef EXTRA_H
+#define EXTRA_H
+
+#include "xil_types.h"
+#include "xstatus.h"
+#include "xintc.h"
+#include "xtmrctr.h"
+#include "xgpio.h"
+#include "mb_interface.h"
+
+extern XIntc   sys_intc;
+extern XTmrCtr sys_tmrctr;    /* AXI_TIMER_0 */
+extern XTmrCtr sys_tmrctr1;   /* AXI_TIMER_1 */
+
+extern volatile int timer_0_interupted;
+extern volatile int timer_1_interupted;
+
+/* Button events (set in ISR, read/cleared in main) */
+extern volatile int reset_button_event;
+extern volatile int start_button_event;
+extern volatile int stop_button_event;
+extern volatile int forward_button_event;
+extern volatile int backward_button_event;
+
+/* Bring-up */
+XStatus interupt_enable(void);
+XStatus timer_0_enable(void);
+XStatus timer_1_enable(void);
+XStatus universal_button_enable(void);
+
+/* ISRs */
+void timer_0_handler(void *Ref);
+void timer_1_handler(void *Ref);
+
+#endif /* EXTRA_H */

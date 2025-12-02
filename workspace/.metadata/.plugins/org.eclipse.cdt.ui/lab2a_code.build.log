@@ -1,0 +1,8 @@
+07:22:46 **** Build of configuration Debug for project lab2a_code ****
+make all 
+make: Warning: File 'objects.mk' has modification time 110 s in the future
+make: warning:  Clock skew detected.  Your build may be incomplete.
+make: Nothing to be done for 'all'.
+
+07:22:46 Build Finished (took 115ms)
+

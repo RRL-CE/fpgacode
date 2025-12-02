@@ -1,0 +1,220 @@
+#include <string.h>
+#include "xparameters.h"
+#include "xstatus.h"
+#include "xintc.h"
+#include "xtmrctr.h"
+#include "xil_printf.h"
+
+
+#define PROF_MAX_REGIONS  8
+#define PROF_MAX_BUCKETS  256
+
+typedef struct {
+    uint32_t start_addr;
+    uint32_t end_addr;
+    uint16_t first_bucket;
+    uint8_t  bucket_shift;
+    uint8_t  enabled;
+} ProfRegionConfig;
+
+typedef struct {
+    uint32_t          num_regions;
+    ProfRegionConfig  regions[PROF_MAX_REGIONS];
+    uint16_t          other_bucket;
+    volatile uint32_t bucket_counts[PROF_MAX_BUCKETS];
+} ProfConfig;
+
+ProfConfig g_prof;
+static XTmrCtr timer1;
+static XIntc   sys_intc1;
+
+// -------- Prof helpers --------
+void Prof_InitConfig(void)
+{
+    memset(&g_prof, 0, sizeof(g_prof));
+    g_prof.other_bucket = PROF_MAX_BUCKETS - 1;
+}
+
+void Prof_ClearCounts(void)
+{
+    for (uint32_t i = 0; i < PROF_MAX_BUCKETS; ++i)
+        g_prof.bucket_counts[i] = 0;
+}
+
+int Prof_AddRegion(uint32_t start_addr, uint32_t end_addr,
+                   uint8_t bucket_shift,
+                   uint16_t first_bucket, uint16_t num_buckets)
+{
+    if (g_prof.num_regions >= PROF_MAX_REGIONS)
+        return -1;
+
+    if ((uint32_t)first_bucket + num_buckets > PROF_MAX_BUCKETS)
+        return -1;
+
+    ProfRegionConfig *r = &g_prof.regions[g_prof.num_regions];
+
+    r->start_addr   = start_addr;
+    r->end_addr     = end_addr;
+    r->first_bucket = first_bucket;
+    r->bucket_shift = bucket_shift;
+    r->enabled      = 1;
+
+    g_prof.num_regions++;
+    return 0;
+}
+
+void Prof_SetOtherBucket(uint16_t idx)
+{
+    if (idx < PROF_MAX_BUCKETS)
+        g_prof.other_bucket = idx;
+}
+
+// -------- Bucket layout (your ranges) --------
+void performance_analyzer_setup_buckets(void)
+{
+    Prof_InitConfig();
+    Prof_ClearCounts();
+
+    uint16_t next = 0;
+
+    // Region 0: 0x8000fc40 - 0x8000fda0, ~44-byte granularity → 32-byte buckets, 11 buckets
+    Prof_AddRegion(0x8000fbd0u, 0x8000fe04, 5, next, 11);
+    next += 11;
+
+    // Region 1: 0x8000f084 - 0x8000fc3c, ~300-byte granularity → 256-byte buckets, 12 buckets
+    Prof_AddRegion(0x8000f1a0, 0x8000fbb4, 8, next, 12);
+    next += 12;
+
+    Prof_SetOtherBucket(PROF_MAX_BUCKETS - 1);
+}
+
+// -------- ISR (called by XTmrCtr_InterruptHandler) --------
+void per_anal_ISR(void *CallBackRef, u8 TmrCtrNumber)
+{
+    (void)CallBackRef;
+    (void)TmrCtrNumber;
+
+    uint32_t pc;
+    asm volatile ("add %0, r0, r14" : "=r"(pc));
+
+    for (uint32_t i = 0; i < g_prof.num_regions; ++i) {
+        ProfRegionConfig *r = &g_prof.regions[i];
+        if (!r->enabled)
+            continue;
+
+        uint32_t d   = pc - r->start_addr;
+        uint32_t len = r->end_addr - r->start_addr;
+
+        if (d < len) {
+            uint32_t bucket_offset = d >> r->bucket_shift;
+            uint32_t idx = r->first_bucket + bucket_offset;
+            if (idx < PROF_MAX_BUCKETS)
+                g_prof.bucket_counts[idx]++;
+            return;
+        }
+    }
+
+    g_prof.bucket_counts[g_prof.other_bucket]++;
+}
+
+// -------- Timer + INTC init --------
+int performance_analyzer_init(void)
+{
+    int Status;
+
+    performance_analyzer_setup_buckets();
+
+    Status = XIntc_Initialize(&sys_intc1, XPAR_INTC_0_DEVICE_ID);
+    if (Status != XST_SUCCESS) {
+        xil_printf("INTC init failed\r\n");
+        return XST_FAILURE;
+    }
+
+    Status = XTmrCtr_Initialize(&timer1, XPAR_AXI_TIMER_1_DEVICE_ID);
+    if (Status != XST_SUCCESS) {
+        xil_printf("Timer init failed\r\n");
+        return XST_FAILURE;
+    }
+
+    const u8 chan = 0;
+
+    XTmrCtr_SetHandler(&timer1,
+                       (XTmrCtr_Handler)per_anal_ISR,
+                       &timer1);
+
+    XTmrCtr_SetOptions(&timer1,
+                       chan,
+                       XTC_INT_MODE_OPTION | XTC_AUTO_RELOAD_OPTION);
+
+    XTmrCtr_SetResetValue(&timer1,
+                          chan,
+                          0xFFFFFFFFu - 500000u); // 5 ms @ 100 MHz
+
+    Status = XIntc_Connect(&sys_intc1,
+                           XPAR_MICROBLAZE_0_AXI_INTC_AXI_TIMER_1_INTERRUPT_INTR,
+                           (XInterruptHandler)XTmrCtr_InterruptHandler,
+                           &timer1);
+    if (Status != XST_SUCCESS) {
+        xil_printf("INTC: timer connect failed\r\n");
+        return XST_FAILURE;
+    }
+
+    XIntc_Enable(&sys_intc1,
+                 XPAR_MICROBLAZE_0_AXI_INTC_AXI_TIMER_1_INTERRUPT_INTR);
+
+    Status = XIntc_Start(&sys_intc1, XIN_REAL_MODE);
+    if (Status != XST_SUCCESS) {
+        xil_printf("INTC start failed\r\n");
+        return XST_FAILURE;
+    }
+
+    XTmrCtr_Start(&timer1, chan);
+
+    microblaze_register_handler(
+        (XInterruptHandler)XIntc_InterruptHandler,
+        (void *)&sys_intc1);
+
+    microblaze_enable_interrupts();
+
+    return XST_SUCCESS;
+}
+
+void Prof_PrintAll(void)
+{
+    xil_printf("\r\n--- PROFILER BUCKET TABLE ---\r\n");
+
+    for (uint32_t i = 0; i < g_prof.num_regions; i++) {
+        ProfRegionConfig *r = &g_prof.regions[i];
+        if (!r->enabled) continue;
+
+        uint32_t region_size = r->end_addr - r->start_addr;
+        uint32_t bucket_size = 1u << r->bucket_shift;
+        uint32_t num_buckets = (region_size + bucket_size - 1u) / bucket_size;
+
+        xil_printf("\r\nRegion %lu: 0x%08lx - 0x%08lx, bucket_size=%lu bytes\r\n",
+                   (unsigned long)i,
+                   (unsigned long)r->start_addr,
+                   (unsigned long)r->end_addr,
+                   (unsigned long)bucket_size);
+
+        for (uint32_t b = 0; b < num_buckets; b++) {
+            uint32_t idx  = r->first_bucket + b;
+            uint32_t b_lo = r->start_addr +  b      * bucket_size;
+            uint32_t b_hi = r->start_addr + (b + 1) * bucket_size;
+
+            xil_printf("  B%02lu [%08lx - %08lx]: %lu\r\n",
+                       (unsigned long)b,
+                       (unsigned long)b_lo,
+                       (unsigned long)b_hi,
+                       (unsigned long)g_prof.bucket_counts[idx]);
+        }
+    }
+
+    xil_printf("\r\nOTHER bucket (%u): %lu\r\n",
+               g_prof.other_bucket,
+               (unsigned long)g_prof.bucket_counts[g_prof.other_bucket]);
+
+    xil_printf("\r\n--- END TABLE ---\r\n");
+}
+
+

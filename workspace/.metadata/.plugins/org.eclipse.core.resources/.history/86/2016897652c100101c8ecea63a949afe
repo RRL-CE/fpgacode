@@ -1,0 +1,42 @@
+#ifndef PERF_ANALYZER_H
+#define PERF_ANALYZER_H
+
+#include <stdint.h>
+#include "xtmrctr.h"
+
+#define PROF_MAX_REGIONS   8
+#define PROF_MAX_BUCKETS   256
+
+typedef struct {
+    uint32_t start_addr;      // inclusive start of region
+    uint32_t end_addr;        // exclusive end of region
+    uint16_t first_bucket;    // index into bucket_counts[] where this region's buckets start
+    uint8_t  bucket_shift;    // bucket size = 2^bucket_shift bytes
+    uint8_t  enabled;         // 0 = unused, 1 = active
+} ProfRegionConfig;
+
+typedef struct {
+    uint32_t          num_regions;                       // how many entries in regions[] are valid
+    ProfRegionConfig  regions[PROF_MAX_REGIONS];
+    uint16_t          other_bucket;                     // index into bucket_counts[] for "misc"
+    volatile uint32_t bucket_counts[PROF_MAX_BUCKETS];  // the integer bucket counters
+} ProfConfig;
+
+extern ProfConfig g_prof;
+
+// Region / bucket configuration helpers
+void Prof_InitConfig(void);
+void Prof_ClearCounts(void);
+int  Prof_AddRegion(uint32_t start_addr, uint32_t end_addr,
+                    uint8_t bucket_shift,
+                    uint16_t first_bucket, uint16_t num_buckets);
+void Prof_SetOtherBucket(uint16_t idx);
+
+// Timer + interrupt setup
+int  performance_analyzer_init(void);
+void performance_analyzer_setup_buckets(void);
+
+// Timer ISR used as XTmrCtr handler
+void per_anal_ISR(void *CallBackRef, u8 TmrCtrNumber);
+void Prof_PrintTable(void);
+#endif

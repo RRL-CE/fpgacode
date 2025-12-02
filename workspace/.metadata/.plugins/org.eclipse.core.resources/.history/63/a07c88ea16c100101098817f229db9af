@@ -1,0 +1,237 @@
+#include <string.h>
+#include "xparameters.h"
+#include "xstatus.h"
+#include "xintc.h"
+#include "xtmrctr.h"
+#include "xil_printf.h"
+
+
+#define PROF_MAX_REGIONS   8
+#define PROF_MAX_BUCKETS   256
+
+typedef struct {
+    uint32_t start_addr;
+    uint32_t end_addr;
+    uint16_t first_bucket;
+    uint8_t  bucket_shift;
+    uint8_t  enabled;
+} ProfRegionConfig;
+
+typedef struct {
+    uint32_t          num_regions;
+    ProfRegionConfig  regions[PROF_MAX_REGIONS];
+    uint16_t          other_bucket;
+    volatile uint32_t bucket_counts[PROF_MAX_BUCKETS];
+} ProfConfig;
+
+// Globals
+ProfConfig g_prof;
+XTmrCtr    timer1;
+XIntc      sys_intc1;
+
+// Forward decls (matching the header)
+void Prof_InitConfig(void);
+void Prof_ClearCounts(void);
+int  Prof_AddRegion(uint32_t start_addr, uint32_t end_addr,
+                    uint8_t bucket_shift,
+                    uint16_t first_bucket, uint16_t num_buckets);
+void Prof_SetOtherBucket(uint16_t idx);
+int  performance_analyzer_init(void);
+void performance_analyzer_setup_buckets(void);
+void per_anal_ISR(void *CallBackRef, u8 TmrCtrNumber);
+
+
+// --------- Profiler helpers ---------
+
+void Prof_InitConfig(void)
+{
+    memset(&g_prof, 0, sizeof(g_prof));
+    // By default, use the last bucket as "other"
+    g_prof.other_bucket = PROF_MAX_BUCKETS - 1;
+}
+
+void Prof_ClearCounts(void)
+{
+    for (uint32_t i = 0; i < PROF_MAX_BUCKETS; ++i) {
+        g_prof.bucket_counts[i] = 0;
+    }
+}
+
+int Prof_AddRegion(uint32_t start_addr, uint32_t end_addr,
+                   uint8_t bucket_shift,
+                   uint16_t first_bucket, uint16_t num_buckets)
+{
+    if (g_prof.num_regions >= PROF_MAX_REGIONS) {
+        return -1; // no room for more regions
+    }
+
+    // Bounds check against total bucket array
+    if ((uint32_t)first_bucket + num_buckets > PROF_MAX_BUCKETS) {
+        return -1;
+    }
+
+    ProfRegionConfig *r = &g_prof.regions[g_prof.num_regions];
+
+    r->start_addr   = start_addr;
+    r->end_addr     = end_addr;
+    r->first_bucket = first_bucket;
+    r->bucket_shift = bucket_shift;
+    r->enabled      = 1;
+
+    g_prof.num_regions++;
+
+    return 0;
+}
+
+void Prof_SetOtherBucket(uint16_t idx)
+{
+    if (idx < PROF_MAX_BUCKETS) {
+        g_prof.other_bucket = idx;
+    }
+}
+
+
+// --------- Bucket layout configuration (you modify this) ---------
+
+// Define these in your linker script / elsewhere if you want to use them:
+// extern uint32_t funcA_start, funcA_end;
+// extern uint32_t funcB_start, funcB_end;
+
+void performance_analyzer_setup_buckets(void)
+{
+    // Base configuration: clear everything
+    Prof_InitConfig();
+    Prof_ClearCounts();
+
+    // Example usage (comment out or replace with your own):
+    //
+    // Prof_AddRegion((uint32_t)&funcA_start,
+    //                (uint32_t)&funcA_end,
+    //                5,      // bucket size = 2^5 = 32 bytes
+    //                0,      // first bucket index for funcA
+    //                8);     // number of buckets for funcA
+    //
+    // Prof_AddRegion((uint32_t)&funcB_start,
+    //                (uint32_t)&funcB_end,
+    //                5,      // 32-byte buckets
+    //                8,      // first bucket index for funcB
+    //                4);     // number of buckets for funcB
+    //
+    // Prof_SetOtherBucket(PROF_MAX_BUCKETS - 1); // default: last bucket
+
+    // As-is: no specific regions configured, everything goes into "other"
+}
+
+
+// --------- Timer ISR (profiling) ---------
+
+// This is called by XTmrCtr_InterruptHandler
+void per_anal_ISR(void *CallBackRef, u8 TmrCtrNumber)
+{
+    (void)CallBackRef; // if you don't use the timer pointer yet
+    (void)TmrCtrNumber;
+
+    uint32_t pc;
+    asm volatile ("add %0, r0, r14" : "=r"(pc));
+
+    // Try each configured region (keep number small)
+    for (uint32_t i = 0; i < g_prof.num_regions; ++i) {
+        ProfRegionConfig *r = &g_prof.regions[i];
+        if (!r->enabled) {
+            continue;
+        }
+
+        uint32_t d   = pc - r->start_addr;
+        uint32_t len = r->end_addr - r->start_addr;
+
+        if (d < len) {
+            uint32_t bucket_offset = d >> r->bucket_shift;
+            uint32_t idx = r->first_bucket + bucket_offset;
+
+            if (idx < PROF_MAX_BUCKETS) {
+                g_prof.bucket_counts[idx]++;
+            }
+            return; // done for this interrupt
+        }
+    }
+
+    // No region matched: increment "other"
+    g_prof.bucket_counts[g_prof.other_bucket]++;
+}
+
+
+// --------- Timer + interrupt controller init ---------
+
+int performance_analyzer_init(void)
+{
+    int Status;
+
+    // 1. Configure bucket layout (you can call this separately if preferred)
+    performance_analyzer_setup_buckets();
+
+    // 2. Initialize interrupt controller
+    Status = XIntc_Initialize(&sys_intc1, XPAR_INTC_0_DEVICE_ID);
+    if (Status != XST_SUCCESS) {
+        xil_printf("INTC init failed\r\n");
+        return XST_FAILURE;
+    }
+
+    // 3. Initialize timer (AXI Timer 1 in this example)
+    Status = XTmrCtr_Initialize(&timer1, XPAR_AXI_TIMER_1_DEVICE_ID);
+    if (Status != XST_SUCCESS) {
+        xil_printf("Timer init failed\r\n");
+        return XST_FAILURE;
+    }
+
+    // Use channel 0 for profiling
+    const u8 chan = 0;
+
+    // Register our ISR as the timer's callback
+    XTmrCtr_SetHandler(&timer1,
+                       (XTmrCtr_Handler)per_anal_ISR,
+                       &timer1);
+
+    // Enable interrupt + auto-reload
+    XTmrCtr_SetOptions(&timer1,
+                       chan,
+                       XTC_INT_MODE_OPTION | XTC_AUTO_RELOAD_OPTION);
+
+    // Set period: 10 ms at 100 MHz => 1,000,000 ticks
+    XTmrCtr_SetResetValue(&timer1,
+                          chan,
+                          0xFFFFFFFFu - 1000000u);
+
+    // 4. Connect timer interrupt into INTC
+    Status = XIntc_Connect(&sys_intc1,
+                           XPAR_MICROBLAZE_0_AXI_INTC_AXI_TIMER_1_INTERRUPT_INTR,
+                           (XInterruptHandler)XTmrCtr_InterruptHandler,
+                           &timer1);
+    if (Status != XST_SUCCESS) {
+        xil_printf("INTC: timer connect failed\r\n");
+        return XST_FAILURE;
+    }
+
+    // Enable this interrupt line in the INTC
+    XIntc_Enable(&sys_intc1,
+                 XPAR_MICROBLAZE_0_AXI_INTC_AXI_TIMER_1_INTERRUPT_INTR);
+
+    // 5. Start interrupt controller
+    Status = XIntc_Start(&sys_intc1, XIN_REAL_MODE);
+    if (Status != XST_SUCCESS) {
+        xil_printf("INTC start failed\r\n");
+        return XST_FAILURE;
+    }
+
+    // 6. Start the timer
+    XTmrCtr_Start(&timer1, chan);
+
+    // 7. Hook INTC into MicroBlaze and enable CPU interrupts
+    microblaze_register_handler(
+        (XInterruptHandler)XIntc_InterruptHandler,
+        (void *)&sys_intc1);
+
+    microblaze_enable_interrupts();
+
+    xil_printf("Performance analyzer initialized\r\n");
+    return XST_SUCCESS;
+}

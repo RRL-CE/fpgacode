@@ -1,0 +1,34 @@
+# 
+# Usage: To re-create this platform project launch xsct with below options.
+# xsct /home/rrlingam/workspace/lab1b/platform.tcl
+# 
+# OR launch xsct and run below command.
+# source /home/rrlingam/workspace/lab1b/platform.tcl
+# 
+# To create the platform in a different location, modify the -out option of "platform create" command.
+# -out option specifies the output directory of the platform project.
+
+platform create -name {lab1b}\
+-hw {/home/rrlingam/Pre_Lab/system_wrapper.xsa}\
+-proc {microblaze_0} -os {standalone} -out {/home/rrlingam/workspace}
+
+platform write
+platform generate -domains 
+platform active {lab1b}
+domain create -name {standalone_microblaze_0} -display-name {standalone_microblaze_0} -os {standalone} -proc {microblaze_0} -runtime {cpp} -arch {32-bit} -support-app {hello_world}
+platform generate -domains 
+platform write
+domain active {standalone_domain}
+domain active {standalone_microblaze_0}
+platform generate -quick
+domain active {standalone_microblaze_0}
+bsp reload
+platform generate
+domain active {standalone_domain}
+bsp reload
+domain active {standalone_microblaze_0}
+bsp reload
+platform generate -domains 
+platform active {lab1b}
+platform active {lab1b}
+platform generate

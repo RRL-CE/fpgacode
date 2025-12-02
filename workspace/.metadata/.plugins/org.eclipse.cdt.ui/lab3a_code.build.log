@@ -1,0 +1,68 @@
+18:05:38 **** Incremental Build of configuration Debug for project lab3a_code ****
+make all 
+Building file: ../src/main.c
+Invoking: MicroBlaze gcc compiler
+mb-gcc -Wall -O0 -g3 -c -fmessage-length=0 -MT"src/main.o" -I/home/rrlingam/workspace/lab3a_platform/export/lab3a_platform/sw/lab3a_platform/standalone_microblaze_0/bspinclude/include -mlittle-endian -mxl-barrel-shift -mxl-pattern-compare -mno-xl-soft-div -mcpu=v11.0 -mno-xl-soft-mul -mhard-float -mxl-float-convert -mxl-float-sqrt -Wl,--no-relax -ffunction-sections -fdata-sections -MMD -MP -MF"src/main.d" -MT"src/main.o" -o "src/main.o" "../src/main.c"
+In file included from ../src/performance_analyzer.h:15,
+                 from ../src/main.c:53:
+/home/rrlingam/workspace/lab3a_platform/export/lab3a_platform/sw/lab3a_platform/standalone_microblaze_0/bspinclude/include/xbasic_types.h:102:2: warning: #warning The xbasics_type.h file is deprecated and users should use xil_types.h and xil_assert. [-Wcpp]
+  102 | #warning  The xbasics_type.h file is deprecated and users should use xil_types.h and xil_assert.
+      |  ^~~~~~~
+/home/rrlingam/workspace/lab3a_platform/export/lab3a_platform/sw/lab3a_platform/standalone_microblaze_0/bspinclude/include/xbasic_types.h:103:2: warning: #warning Please refer the Standalone BSP UG647 for further details [-Wcpp]
+  103 | #warning  Please refer the Standalone BSP UG647 for further details
+      |  ^~~~~~~
+../src/main.c: In function 'read_fsl_values':
+../src/main.c:75:18: warning: unused variable 'x' [-Wunused-variable]
+   75 |     unsigned int x;
+      |                  ^
+../src/main.c: In function 'main':
+../src/main.c:151:24: warning: passing argument 1 of 'read_fsl_values' from incompatible pointer type [-Wincompatible-pointer-types]
+  151 |        read_fsl_values(q, SAMPLES);
+      |                        ^
+      |                        |
+      |                        int32_t * {aka long int *}
+../src/main.c:73:29: note: expected 'float *' but argument is of type 'int32_t *' {aka 'long int *'}
+   73 | void read_fsl_values(float* q, int n) {
+      |                      ~~~~~~~^
+../src/main.c:168:25: warning: passing argument 1 of 'fft' from incompatible pointer type [-Wincompatible-pointer-types]
+  168 |        float freq = fft(q, w, SAMPLES, M, sample_f);
+      |                         ^
+      |                         |
+      |                         int32_t * {aka long int *}
+In file included from ../src/main.c:44:
+../src/fft.h:30:18: note: expected 'float *' but argument is of type 'int32_t *' {aka 'long int *'}
+   30 | float fft(float* q, float* w, int n, int m, float sample_f);
+      |           ~~~~~~~^
+../src/main.c:168:28: warning: passing argument 2 of 'fft' from incompatible pointer type [-Wincompatible-pointer-types]
+  168 |        float freq = fft(q, w, SAMPLES, M, sample_f);
+      |                            ^
+      |                            |
+      |                            int32_t * {aka long int *}
+In file included from ../src/main.c:44:
+../src/fft.h:30:28: note: expected 'float *' but argument is of type 'int32_t *' {aka 'long int *'}
+   30 | float fft(float* q, float* w, int n, int m, float sample_f);
+      |                     ~~~~~~~^
+../src/main.c:126:10: warning: unused variable 'frequency' [-Wunused-variable]
+  126 |    float frequency;
+      |          ^~~~~~~~~
+In file included from ../src/main.c:44:
+../src/main.c: At top level:
+../src/fft.h:31:13: warning: 'fft_init_twiddles' declared 'static' but never defined [-Wunused-function]
+   31 | static void fft_init_twiddles(int n);
+      |             ^~~~~~~~~~~~~~~~~
+Finished building: ../src/main.c
+ 
+Building target: lab3a_code.elf
+Invoking: MicroBlaze gcc linker
+mb-gcc -Wl,-T -Wl,../src/lscript.ld -L/home/rrlingam/workspace/lab3a_platform/export/lab3a_platform/sw/lab3a_platform/standalone_microblaze_0/bsplib/lib -mlittle-endian -mxl-barrel-shift -mxl-pattern-compare -mno-xl-soft-div -mcpu=v11.0 -mno-xl-soft-mul -mhard-float -mxl-float-convert -mxl-float-sqrt -Wl,--no-relax -Wl,--gc-sections -o "lab3a_code.elf"  ./src/complex.o ./src/fft.o ./src/main.o ./src/note.o ./src/performance_analyzer.o ./src/platform.o ./src/stream_grabber.o ./src/trig.o   -Wl,--start-group,-lxil,-lgcc,-lc,--end-group
+Finished building target: lab3a_code.elf
+ 
+Invoking: MicroBlaze Print Size
+mb-size lab3a_code.elf  |tee "lab3a_code.elf.size"
+   text	   data	    bss	    dec	    hex	filename
+  79368	   1784	  56736	 137888	  21aa0	lab3a_code.elf
+Finished building: lab3a_code.elf.size
+ 
+
+18:05:38 Build Finished (took 464ms)
+

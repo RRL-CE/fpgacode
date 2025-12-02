@@ -1,0 +1,29 @@
+01:07:30 **** Build of configuration Debug for project lab1b_system ****
+make all 
+make: Warning: File 'objects.mk' has modification time 92 s in the future
+Building file: ../src/main.c
+Invoking: MicroBlaze gcc compiler
+mb-gcc -Wall -O0 -g3 -c -fmessage-length=0 -MT"src/main.o" -I/home/rrlingam/workspace/system_wrapper/export/system_wrapper/sw/system_wrapper/standalone_microblaze_0/bspinclude/include -mlittle-endian -mxl-barrel-shift -mno-xl-soft-div -mcpu=v11.0 -mno-xl-soft-mul -Wl,--no-relax -ffunction-sections -fdata-sections -MMD -MP -MF"src/main.d" -MT"src/main.o" -o "src/main.o" "../src/main.c"
+../src/main.c: In function 'main':
+../src/main.c:57:12: warning: implicit declaration of function 'sevenseg_draw_digit' [-Wimplicit-function-declaration]
+   57 |            sevenseg_draw_digit(0,0);
+      |            ^~~~~~~~~~~~~~~~~~~
+Finished building: ../src/main.c
+ 
+Building file: ../src/platform.c
+Invoking: MicroBlaze gcc compiler
+mb-gcc -Wall -O0 -g3 -c -fmessage-length=0 -MT"src/platform.o" -I/home/rrlingam/workspace/system_wrapper/export/system_wrapper/sw/system_wrapper/standalone_microblaze_0/bspinclude/include -mlittle-endian -mxl-barrel-shift -mno-xl-soft-div -mcpu=v11.0 -mno-xl-soft-mul -Wl,--no-relax -ffunction-sections -fdata-sections -MMD -MP -MF"src/platform.d" -MT"src/platform.o" -o "src/platform.o" "../src/platform.c"
+Finished building: ../src/platform.c
+ 
+Building file: ../src/sevenSeg_new.c
+Invoking: MicroBlaze gcc compiler
+mb-gcc -Wall -O0 -g3 -c -fmessage-length=0 -MT"src/sevenSeg_new.o" -I/home/rrlingam/workspace/system_wrapper/export/system_wrapper/sw/system_wrapper/standalone_microblaze_0/bspinclude/include -mlittle-endian -mxl-barrel-shift -mno-xl-soft-div -mcpu=v11.0 -mno-xl-soft-mul -Wl,--no-relax -ffunction-sections -fdata-sections -MMD -MP -MF"src/sevenSeg_new.d" -MT"src/sevenSeg_new.o" -o "src/sevenSeg_new.o" "../src/sevenSeg_new.c"
+../src/sevenSeg_new.c: In function 'sevenseg_draw_digit':
+../src/sevenSeg_new.c:28:19: error: 'XPAR_SEVENSEG_V1_0_0_BASEADDR' undeclared (first use in this function)
+   28 |         Xil_Out32(XPAR_SEVENSEG_V1_0_0_BASEADDR, combined_mask | 127);  // Move anode, turn off display
+      |                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+../src/sevenSeg_new.c:28:19: note: each undeclared identifier is reported only once for each function it appears in
+make: *** [src/subdir.mk:29: src/sevenSeg_new.o] Error 1
+
+01:07:30 Build Finished (took 535ms)
+

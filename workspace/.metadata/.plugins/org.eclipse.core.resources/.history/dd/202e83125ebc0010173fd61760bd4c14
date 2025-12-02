@@ -1,0 +1,352 @@
+/*****************************************************************************
+* bsp.c for Lab2A of ECE 153a at UCSB
+* Date of the Last Update:  October 27,2019
+*****************************************************************************/
+
+/**/
+#include "xparameters.h"
+#include "xgpio.h"
+#include "xintc.h"
+#include "xtmrctr.h"
+#include "xil_exception.h"
+#include "xil_printf.h"
+#include "qpn_port.h"
+#include "bsp.h"
+#include "lab2b.h"
+
+#include <stdio.h>		// Used for printf()
+#include "xil_cache.h"		// Cache Drivers
+#include "xtmrctr_l.h" 		// Low-level timer drivers
+#include "xspi.h"
+#include "xspi_l.h"
+
+#include "lcd.h"
+
+/* ===================== Globals ===================== */
+XIntc    sys_intc1;
+XGpio    led, rgbled, BtnGpio, ENCODER;
+XTmrCtr  sys_tmrctr;   // one AXI Timer core (2 channels)
+
+/* Flags and masks */
+volatile int debounce = 1;
+volatile int curr_state = 0;
+volatile int off = 0;
+static volatile u32 btn_prev        = 0;
+static volatile u32 btn_enable_mask = 0x1F;
+
+/* Timing (1 MHz timer clock) */
+#define DEBOUNCE_TICKS   (8000000U)     /* 50 ms  */
+#define INACTIVITY_TICKS (200000000U)   /* 2 s    */ //added extra 2 0s
+
+/* Button masks */
+#define RESET_BTN_MASK     0x01u
+#define START_BTN_MASK     0x02u
+#define STOP_BTN_MASK      0x04u
+#define FORWARD_BTN_MASK   0x08u
+#define BACKWARD_BTN_MASK  0x10u
+#define ALL_BTN_MASK       0x1Fu //changed, should be correct
+
+
+
+/* ===================== Helpers ===================== */
+static inline void debounce_timer_one_shot(XTmrCtr *tmr, u8 ch, u32 ticks) {
+    XTmrCtr_SetResetValue(tmr, ch, 0xFFFFFFFFu - (ticks - 1u));
+    XTmrCtr_Start(tmr, ch);
+}
+
+/* ===================== BSP_init ===================== */
+void BSP_init(void) {
+    int Status;
+
+    /* LEDs */
+    Status = XGpio_Initialize(&rgbled, XPAR_RGBLED_DEVICE_ID);
+    if (Status != XST_SUCCESS) { xil_printf("RGBLED init failed\r\n"); return XST_FAILURE; }
+    Status = XGpio_Initialize(&led, XPAR_AXI_GPIO_LED_DEVICE_ID);
+    if (Status != XST_SUCCESS)  { xil_printf("LED init failed\r\n"); return XST_FAILURE; }
+
+    /* Encoder GPIO */
+    Status = XGpio_Initialize(&ENCODER, XPAR_GPIO_0_DEVICE_ID);
+    if (Status != XST_SUCCESS) { xil_printf("ENCODER init failed\r\n"); return XST_FAILURE; }
+    XGpio_InterruptEnable(&ENCODER, 1);
+    XGpio_InterruptGlobalEnable(&ENCODER);
+
+    /* Buttons GPIO */
+    Status = XGpio_Initialize(&BtnGpio, XPAR_AXI_GPIO_BTN_DEVICE_ID);
+    if (Status != XST_SUCCESS) { xil_printf("BTN GPIO init failed\r\n"); return XST_FAILURE; }
+    XGpio_SetDataDirection(&BtnGpio, 1, 0xFFFFFFFFu);
+    btn_prev = XGpio_DiscreteRead(&BtnGpio, 1);
+    XGpio_InterruptClear(&BtnGpio, 0xFFFFFFFFu);
+    XGpio_InterruptEnable(&BtnGpio, 0x1u);
+    XGpio_InterruptGlobalEnable(&BtnGpio);
+
+    /* Timer init (single device, 2 channels) */
+    if (XTmrCtr_Initialize(&sys_tmrctr, XPAR_TMRCTR_0_DEVICE_ID) != XST_SUCCESS) {
+        xil_printf("Timer init failed\r\n");
+        return XST_FAILURE;
+    }
+    XTmrCtr_SetHandler(&sys_tmrctr, (XTmrCtr_Handler)TimerIsr, NULL);
+    XTmrCtr_SetOptions(&sys_tmrctr, 0, XTC_INT_MODE_OPTION);
+    XTmrCtr_SetOptions(&sys_tmrctr, 1, XTC_INT_MODE_OPTION);
+
+    /* Interrupt controller */
+    Status = XIntc_Initialize(&sys_intc1, XPAR_INTC_0_DEVICE_ID);
+    if (Status != XST_SUCCESS) { xil_printf("INTC init failed\r\n"); return XST_FAILURE; }
+
+    return XST_SUCCESS;
+}
+
+/* ===================== QF_onStartup ===================== */
+void QF_onStartup(void) {
+    int Status;
+    xil_printf("QF_onStartup()\n");
+
+    /* Encoder IRQ */
+    Status = XIntc_Connect(&sys_intc1,
+        XPAR_MICROBLAZE_0_AXI_INTC_ENCODER_IP2INTC_IRPT_INTR,
+        (XInterruptHandler)EncoderIsr, &ENCODER);
+    if (Status != XST_SUCCESS) xil_printf("INTC: encoder connect failed\r\n");
+    XIntc_Enable(&sys_intc1, XPAR_MICROBLAZE_0_AXI_INTC_ENCODER_IP2INTC_IRPT_INTR);
+
+    /* Button IRQ */
+    Status = XIntc_Connect(&sys_intc1,
+        XPAR_MICROBLAZE_0_AXI_INTC_AXI_GPIO_BTN_IP2INTC_IRPT_INTR,
+        (XInterruptHandler)universal_button_handler, &BtnGpio);
+    if (Status != XST_SUCCESS) xil_printf("INTC: button connect failed\r\n");
+    XIntc_Enable(&sys_intc1, XPAR_MICROBLAZE_0_AXI_INTC_AXI_GPIO_BTN_IP2INTC_IRPT_INTR);
+
+    Status = XIntc_Connect(&sys_intc1,
+        XPAR_MICROBLAZE_0_AXI_INTC_AXI_TIMER_0_INTERRUPT_INTR,
+        (XInterruptHandler)XTmrCtr_InterruptHandler, &sys_tmrctr);
+    if (Status != XST_SUCCESS) xil_printf("INTC: timer connect failed\r\n");
+    XIntc_Enable(&sys_intc1, XPAR_MICROBLAZE_0_AXI_INTC_AXI_TIMER_0_INTERRUPT_INTR);
+
+    /* Start INTC and enable global interrupts */
+    Status = XIntc_Start(&sys_intc1, XIN_REAL_MODE);
+    if (Status != XST_SUCCESS) xil_printf("INTC start failed\r\n");
+
+    microblaze_register_handler((XInterruptHandler)XIntc_DeviceInterruptHandler,
+                                (void*)XPAR_INTC_0_DEVICE_ID);
+    microblaze_enable_interrupts();
+
+
+
+
+	// Variables for reading Microblaze registers to debug your interrupts.
+//	{
+//		u32 axi_ISR =  Xil_In32(intcPress.BaseAddress + XIN_ISR_OFFSET);
+//		u32 axi_IPR =  Xil_In32(intcPress.BaseAddress + XIN_IPR_OFFSET);
+//		u32 axi_IER =  Xil_In32(intcPress.BaseAddress + XIN_IER_OFFSET);
+//		u32 axi_IAR =  Xil_In32(intcPress.BaseAddress + XIN_IAR_OFFSET);
+//		u32 axi_SIE =  Xil_In32(intcPress.BaseAddress + XIN_SIE_OFFSET);
+//		u32 axi_CIE =  Xil_In32(intcPress.BaseAddress + XIN_CIE_OFFSET);
+//		u32 axi_IVR =  Xil_In32(intcPress.BaseAddress + XIN_IVR_OFFSET);
+//		u32 axi_MER =  Xil_In32(intcPress.BaseAddress + XIN_MER_OFFSET);
+//		u32 axi_IMR =  Xil_In32(intcPress.BaseAddress + XIN_IMR_OFFSET);
+//		u32 axi_ILR =  Xil_In32(intcPress.BaseAddress + XIN_ILR_OFFSET) ;
+//		u32 axi_IVAR = Xil_In32(intcPress.BaseAddress + XIN_IVAR_OFFSET);
+//		u32 gpioTestIER  = Xil_In32(sw_Gpio.BaseAddress + XGPIO_IER_OFFSET);
+//		u32 gpioTestISR  = Xil_In32(sw_Gpio.BaseAddress  + XGPIO_ISR_OFFSET ) & 0x00000003; // & 0xMASK
+//		u32 gpioTestGIER = Xil_In32(sw_Gpio.BaseAddress  + XGPIO_GIE_OFFSET ) & 0x80000000; // & 0xMASK
+//	}
+}
+
+
+void QF_onIdle(void) {        /* entered with interrupts locked */
+
+    QF_INT_UNLOCK();                       /* unlock interrupts */
+
+    {
+    	// Write code to increment your interrupt counter here.
+    	// QActive_postISR((QActive *)&AO_Lab2A, ENCODER_DOWN); is used to post an event to your FSM
+
+
+
+// 			Useful for Debugging, and understanding your Microblaze registers.
+//    		u32 axi_ISR =  Xil_In32(intcPress.BaseAddress + XIN_ISR_OFFSET);
+//    	    u32 axi_IPR =  Xil_In32(intcPress.BaseAddress + XIN_IPR_OFFSET);
+//    	    u32 axi_IER =  Xil_In32(intcPress.BaseAddress + XIN_IER_OFFSET);
+//
+//    	    u32 axi_IAR =  Xil_In32(intcPress.BaseAddress + XIN_IAR_OFFSET);
+//    	    u32 axi_SIE =  Xil_In32(intcPress.BaseAddress + XIN_SIE_OFFSET);
+//    	    u32 axi_CIE =  Xil_In32(intcPress.BaseAddress + XIN_CIE_OFFSET);
+//    	    u32 axi_IVR =  Xil_In32(intcPress.BaseAddress + XIN_IVR_OFFSET);
+//    	    u32 axi_MER =  Xil_In32(intcPress.BaseAddress + XIN_MER_OFFSET);
+//    	    u32 axi_IMR =  Xil_In32(intcPress.BaseAddress + XIN_IMR_OFFSET);
+//    	    u32 axi_ILR =  Xil_In32(intcPress.BaseAddress + XIN_ILR_OFFSET) ;
+//    	    u32 axi_IVAR = Xil_In32(intcPress.BaseAddress + XIN_IVAR_OFFSET);
+//
+//    	    // Expect to see 0x00000001
+//    	    u32 gpioTestIER  = Xil_In32(sw_Gpio.BaseAddress + XGPIO_IER_OFFSET);
+//    	    // Expect to see 0x00000001
+//    	    u32 gpioTestISR  = Xil_In32(sw_Gpio.BaseAddress  + XGPIO_ISR_OFFSET ) & 0x00000003;
+//
+//    	    // Expect to see 0x80000000 in GIER
+//    		u32 gpioTestGIER = Xil_In32(sw_Gpio.BaseAddress  + XGPIO_GIE_OFFSET ) & 0x80000000;
+
+
+    }
+}
+
+/* Q_onAssert is called only when the program encounters an error*/
+/*..........................................................................*/
+void Q_onAssert(char const Q_ROM * const Q_ROM_VAR file, int line) {
+    (void)file;                                   /* name of the file that throws the error */
+    (void)line;                                   /* line of the code that throws the error */
+    QF_INT_LOCK();
+    printDebugLog();
+    for (;;) {
+    }
+}
+
+/* Interrupt handler functions here.  Do not forget to include them in lab2a.h!
+To post an event from an ISR, use this template:
+QActive_postISR((QActive *)&AO_Lab2A, SIGNALHERE);
+Where the Signals are defined in lab2a.h  */
+
+/******************************************************************************
+*
+* This is the interrupt handler routine for the GPIO for this example.
+*
+******************************************************************************/
+#define ENC_DEBOUNCE_COUNT  6   // how many stable ISR samples before accepting new press
+#define ENC_DEBOUNCE_DELAY  500 // microseconds between samples if you poll inside ISR (optional)
+
+static uint8_t enc_btn_stable   = 0;  // last accepted stable state
+static uint8_t enc_btn_raw_prev = 0;  // last raw read
+static uint8_t enc_btn_counter  = 0;  // debounce counter
+static uint8_t ledr = 0;
+/* ===================== Encoder ISR ===================== */
+void EncoderIsr(void *CallbackRef)
+{
+    unsigned enc = XGpio_DiscreteRead(&ENCODER, 1);
+    uint8_t btn = (enc & ENC_MASK_BTN) ? 1 : 0;   // read raw level (1=high, 0=low)
+    uint8_t pins = (enc & ENC_MASK_AB);           // A/B rotation bits (if needed)
+
+    //------------------------------------------------------------------
+    // ---- Simple falling-edge detection with debounce ----
+    //------------------------------------------------------------------
+    if (debounce == 1) {
+        // Detect FALLING EDGE (prev=1, now=0)
+        if (!btn && enc_btn_prev) {
+            // lockout to prevent chatter
+            debounce = 0;
+            debounce_timer_one_shot(&sys_tmrctr, 0, DEBOUNCE_TICKS);
+
+            // Visual toggle for debug
+            ledr ^= 1;
+            XGpio_DiscreteWrite(&led, 1, ledr);
+
+            // Post encoder click signal (falling edge)
+            QActive_postISR(&AO_Lab2B, ENCODER_CLICK);
+
+            // Reset inactivity timer (if you use one)
+            debounce_timer_one_shot(&sys_tmrctr, 1, INACTIVITY_TICKS);
+        }
+    } else {
+        // Still in debounce lockout; clear and exit
+        XGpio_InterruptClear(&ENCODER, 1);
+        enc_btn_prev = btn;
+        return;
+    }
+
+    // Save for next edge comparison
+    enc_btn_prev = btn;
+
+    static uint8_t last_pins = 0xFF;
+    if (pins == last_pins) { XGpio_InterruptClear(&ENCODER, 1); return; }
+    last_pins = pins;
+
+    switch (curr_state) {
+    case 0:
+        if (pins == 0b10) curr_state = 1;
+        else if (pins == 0b01) curr_state = 4;
+        break;
+    case 1:
+        if (pins == 0b00) curr_state = 2;
+        else if (pins == 0b11) curr_state = 0;
+        break;
+    case 2:
+        if (pins == 0b01) curr_state = 3;
+        break;
+    case 3:
+        if (pins == 0b11) {
+            curr_state = 0;
+            QActive_postISR(&AO_Lab2B, ENCODER_DOWN);
+//            XGpio_DiscreteWrite(&rgbled, 1, 1);
+        } else if (pins == 0b00) curr_state = 2;
+        break;
+    case 4:
+        if (pins == 0b00) curr_state = 5;
+        else if (pins == 0b11) curr_state = 0;
+        break;
+    case 5:
+        if (pins == 0b10) curr_state = 6;
+        break;
+    case 6:
+        if (pins == 0b11) {
+            curr_state = 0;
+            QActive_postISR(&AO_Lab2B, ENCODER_UP);
+//            XGpio_DiscreteWrite(&rgbled, 1, 2);
+        } else if (pins == 0b00) curr_state = 5;
+        break;
+    }
+
+    debounce_timer_one_shot(&sys_tmrctr, 1, INACTIVITY_TICKS);
+    XGpio_InterruptClear(&ENCODER, 1);
+}
+
+/* ===================== Button ISR ===================== */
+void universal_button_handler(void *CallbackRef) {
+    XGpio *GpioPtr = (XGpio *)CallbackRef;
+    u32 istatus = XGpio_InterruptGetStatus(GpioPtr);
+    if ((istatus & 0x1u) == 0u) return;
+
+    if (debounce == 1) {
+        debounce = 0;
+        debounce_timer_one_shot(&sys_tmrctr, 0, DEBOUNCE_TICKS);
+    } else {
+        XGpio_InterruptClear(GpioPtr, 1);
+        return;
+    }
+
+    u32 curr    = XGpio_DiscreteRead(GpioPtr, 1);
+    u32 changed = curr ^ btn_prev;
+    u32 rising  = changed & curr;
+
+    if ((btn_enable_mask & RESET_BTN_MASK)    && (rising & RESET_BTN_MASK))    { QActive_postISR(&AO_Lab2B, BUT_1); }//XGpio_DiscreteWrite(&rgbled,1,3); }
+    if ((btn_enable_mask & START_BTN_MASK)    && (rising & START_BTN_MASK))    { QActive_postISR(&AO_Lab2B, BUT_2); }//XGpio_DiscreteWrite(&rgbled,1,4); }
+    if ((btn_enable_mask & STOP_BTN_MASK)     && (rising & STOP_BTN_MASK))     { QActive_postISR(&AO_Lab2B, BUT_3); }//XGpio_DiscreteWrite(&rgbled,1,5); }
+    if ((btn_enable_mask & FORWARD_BTN_MASK)  && (rising & FORWARD_BTN_MASK))  { QActive_postISR(&AO_Lab2B, BUT_4); }//XGpio_DiscreteWrite(&rgbled,1,6); }
+    if ((btn_enable_mask & BACKWARD_BTN_MASK) && (rising & BACKWARD_BTN_MASK)) { QActive_postISR(&AO_Lab2B, BUT_5); }//XGpio_DiscreteWrite(&rgbled,1,7); }
+
+    btn_prev = curr;
+    debounce_timer_one_shot(&sys_tmrctr, 1, INACTIVITY_TICKS);
+    XGpio_InterruptClear(GpioPtr, 1);
+}
+
+/* ===================== Timer ISR ===================== */
+void TimerIsr(void *CallBackRef, u8 TmrCtrNumber) {
+    if (TmrCtrNumber == 0) {          /* debounce */
+        XTmrCtr_Stop(&sys_tmrctr, 0);
+        debounce = 1;
+        return;
+    }
+    else {          /* inactivity */
+        XTmrCtr_Stop(&sys_tmrctr, 1);
+//        XGpio_DiscreteWrite(&rgbled,1,0);
+        QActive_postISR(&AO_Lab2B, WAITED);
+        return;
+    }
+}
+
+
+
+//void debounceTwistInterrupt(){
+//	// Read both lines here? What is twist[0] and twist[1]?
+//	// How can you use reading from the two GPIO twist input pins to figure out which way the twist is going?
+//}
+
+//void debounceInterrupt() {
+//	QActive_postISR((QActive *)&AO_Lab2A, ENCODER_CLICK);
+//	// XGpio_InterruptClear(&sw_Gpio, GPIO_CHANNEL1); // (Example, need to fill in your own parameters
+//}

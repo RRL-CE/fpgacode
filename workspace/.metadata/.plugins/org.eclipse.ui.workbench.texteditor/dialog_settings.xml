@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<section name="Workbench">
+	<section name="org.eclipse.ui.texteditor.FindReplaceDialog">
+		<item key="selection" value="Prof_AddRegion"/>
+		<item key="wrap" value="true"/>
+		<item key="casesensitive" value="false"/>
+		<item key="wholeword" value="false"/>
+		<item key="incremental" value="false"/>
+		<item key="isRegEx" value="false"/>
+		<list key="findhistory">
+			<item value="Prof_AddRegion"/>
+			<item value="INTC"/>
+			<item value="start_one_shot"/>
+			<item value="interupt"/>
+			<item value="XPAR_ENCODER_DEVICE_ID"/>
+			<item value="encoder"/>
+			<item value="RGB"/>
+			<item value="xpar_e"/>
+			<item value="xpar"/>
+			<item value="device_id"/>
+			<item value="enc"/>
+			<item value="LED_CHANNEL"/>
+			<item value="XPAR_AXI_TIMER_0_BAS"/>
+			<item value="XPAR_AXI_TIMER_0_BASEADDR"/>
+			<item value="XPAR_TMRCTR_0_BASEADDR"/>
+		</list>
+		<list key="replacehistory">
+			<item value="debounce_timer_one_shot"/>
+			<item value="XPAR_INTC_0_DEVICE_ID"/>
+			<item value="return Status;"/>
+			<item value=""/>
+			<item value="t_flag"/>
+			<item value="t_ticks"/>
+		</list>
+	</section>
+	<section name="org.eclipse.ui.texteditor.FindReplaceDialog_dialogBounds">
+		<item key="DIALOG_X_ORIGIN" value="935"/>
+		<item key="DIALOG_Y_ORIGIN" value="153"/>
+		<item key="DIALOG_WIDTH" value="345"/>
+		<item key="DIALOG_HEIGHT" value="458"/>
+		<item key="DIALOG_FONT_NAME" value="1|Cantarell|11.0|0|GTK|1|"/>
+	</section>
+</section>
